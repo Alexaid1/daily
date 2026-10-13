@@ -132,6 +132,8 @@ a { color: var(--accent); }
 .view { display: none; }
 body[data-view="today"] #view-today,
 body[data-view="journal"] #view-journal,
+body[data-view="projects"] #view-projects,
+body[data-view="calendar"] #view-calendar,
 body[data-view="history"] #view-history,
 body[data-view="settings"] #view-settings { display: block; }
 
@@ -348,6 +350,138 @@ dialog::backdrop { background: rgba(10, 10, 12, .45); }
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+/* ---------- Шапка: действия ---------- */
+.top-actions { display: flex; align-items: center; gap: 8px; }
+.gear { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 999px; }
+.gear svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.gear.active { color: var(--accent); border-color: var(--accent); }
+
+/* ---------- Общие мелочи ---------- */
+.section-head { display: flex; align-items: center; gap: 10px; margin: 28px 4px 10px; }
+.section-head.first { margin-top: 8px; }
+.section-head .section-title { margin: 0; }
+.section-meta { font-size: 13px; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+.add-btn {
+  margin-left: auto; border: 0; background: var(--accent-soft); color: var(--accent);
+  font-weight: 650; font-size: 14px; padding: 7px 12px; border-radius: 10px;
+}
+.chip-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.ico { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -2px; }
+.as-btn { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; display: block; }
+.task-sub { display: block; font-size: 13px; color: var(--muted); margin-top: 1px; }
+.task-sub .due { margin-top: 0; }
+.overdue { color: var(--danger); font-weight: 600; }
+.today { color: var(--warn); font-weight: 600; }
+.small-btn { min-height: 34px; padding: 0 12px; font-size: 14px; }
+.form-error { margin: 0; color: var(--danger); font-size: 14px; font-weight: 600; }
+.dlg-actions.wrap { flex-wrap: wrap; }
+
+/* ---------- План дня ---------- */
+.plan-wrap .section-head { margin-top: 4px; }
+#calPlan .section-head { margin-top: 22px; }
+.empty-plan {
+  display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left;
+  padding: 14px 16px; border-style: dashed; color: var(--muted); font-size: 14px; cursor: pointer;
+}
+.empty-plan strong { color: var(--text); font-size: 15px; }
+.block { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px; position: relative; }
+.block::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--c); }
+.block .check { cursor: pointer; background: none; }
+.block.done .check { background: var(--c); border-color: var(--c); }
+.block.done .check svg { opacity: 1; }
+.block-body { flex: 1; min-width: 0; border: 0; background: none; text-align: left; padding: 0; cursor: pointer; }
+.block-time { display: block; font-weight: 700; font-variant-numeric: tabular-nums; font-size: 15px; }
+.block-dur { font-weight: 550; color: var(--muted); font-size: 13px; margin-left: 8px; }
+.block-title { display: block; font-weight: 520; overflow-wrap: anywhere; }
+.block-meta { display: block; font-size: 13px; color: var(--muted); }
+.block.done .block-title, .block.done .block-time { color: var(--muted); }
+.block.done .block-title { text-decoration: line-through; }
+.block.past .block-time { color: var(--muted); }
+.block.now { background: color-mix(in srgb, var(--c) 9%, var(--surface)); }
+.now-label { color: var(--c); font-weight: 700; }
+.gap { padding: 6px 14px 6px 52px; font-size: 12.5px; color: var(--muted); background: var(--surface-2); }
+
+/* ---------- Проекты ---------- */
+.project-grid { display: grid; gap: 10px; }
+.project-card {
+  display: flex; flex-direction: column; gap: 8px; width: 100%; text-align: left;
+  padding: 14px 16px 14px 18px; position: relative; overflow: hidden; cursor: pointer;
+}
+.project-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--c); }
+.project-card:hover { border-color: color-mix(in srgb, var(--c) 45%, var(--border)); }
+.pc-top { display: flex; align-items: baseline; gap: 10px; }
+.pc-title { font-weight: 700; font-size: 17px; flex: 1; min-width: 0; }
+.pc-count { color: var(--muted); font-weight: 650; font-size: 14px; font-variant-numeric: tabular-nums; }
+.pc-goal { color: var(--muted); font-size: 14px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.project-card .bar, .pd-head .bar { height: 6px; display: block; }
+.project-card .bar-fill, .pd-head .bar-fill { background: var(--c); display: block; }
+.pc-meta { display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; }
+.pc-next { color: var(--text); }
+.pc-next .due { display: inline; }
+.pc-deadline { color: var(--muted); }
+details.later .project-grid { margin-top: 8px; }
+
+.pd-nav { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 12px; }
+.pd-nav .link-btn { font-size: 15px; font-weight: 600; }
+.pd-head { padding: 16px 18px; position: relative; overflow: hidden; }
+.pd-head::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--c); }
+.pd-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pd-title { font-size: 24px; letter-spacing: -.02em; margin: 0; }
+.pd-goal { color: var(--muted); margin: 6px 0 12px; }
+.pd-meta { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 8px; font-size: 13.5px; color: var(--muted); }
+.status-chip { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 99px; background: var(--surface-2); color: var(--muted); }
+.status-chip.s-active { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+.status-chip.s-paused { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.stage .check { border-color: color-mix(in srgb, var(--c) 55%, var(--border)); }
+.stage.done .check { background: var(--c); border-color: var(--c); }
+.stage.done .check svg { opacity: 1; }
+.add-stage { margin-top: 10px; }
+
+.swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.swatches button { width: 34px; height: 34px; border-radius: 50%; border: 3px solid transparent; box-shadow: inset 0 0 0 2px var(--surface); }
+.swatches button.on { border-color: var(--text); }
+
+/* ---------- Календарь ---------- */
+.cal-layout { display: flex; flex-direction: column; }
+.cal-card { padding: 12px; margin-top: 6px; }
+.cal-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.cal-month { flex: 1; text-align: center; font-weight: 750; font-size: 18px; }
+.cal-week, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-week span { text-align: center; font-size: 12px; font-weight: 650; color: var(--muted); padding: 4px 0; }
+.cal-cell {
+  position: relative; aspect-ratio: 1 / 1; min-height: 44px; border: 0; background: none; border-radius: 10px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 0;
+}
+.cal-cell:hover { background: var(--surface-2); }
+.cal-num { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; }
+.cal-cell.out .cal-num { color: var(--muted); opacity: .5; }
+.cal-cell.past:not(.out) .cal-num { color: var(--muted); }
+.cal-cell.is-today .cal-num { box-shadow: inset 0 0 0 2px var(--accent); color: var(--accent); }
+.cal-cell.sel .cal-num { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+.cal-dots { display: flex; gap: 3px; height: 6px; }
+.cal-dots i { width: 6px; height: 6px; border-radius: 50%; }
+.cal-dots i.dim { opacity: .35; }
+.has-plan { position: absolute; bottom: 3px; width: 14px; height: 2px; border-radius: 2px; background: var(--muted); opacity: .5; }
+.cal-today { display: block; margin: 6px auto 0; }
+.cal-day-title { font-size: 20px; letter-spacing: -.01em; margin: 22px 4px 0; }
+.cal-day-title::first-letter { text-transform: uppercase; }
+#calDeadlines .section-head { margin-top: 14px; }
+.dl { padding-right: 14px; }
+.dl .flag { flex: none; width: 26px; text-align: center; font-size: 18px; }
+.dl-date { flex: none; font-size: 13px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+.overdue-card { margin-bottom: 10px; border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+
+/* ---------- Диалог блока ---------- */
+.time-row { display: flex; align-items: flex-end; gap: 10px; }
+.time-row .field { flex: 1; }
+.time-row input { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; text-align: center; }
+.time-dash { padding-bottom: 10px; color: var(--muted); }
+.dur-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.dur-chips button {
+  border: 1px solid var(--border); background: var(--surface-2); border-radius: 99px;
+  padding: 6px 12px; font-size: 13.5px; font-weight: 600; color: var(--muted);
+}
+
 /* ---------- Компьютер ---------- */
 @media (min-width: 960px) {
   body { padding-bottom: 40px; --tabbar-h: 0px; }
@@ -369,6 +503,16 @@ dialog::backdrop { background: rgba(10, 10, 12, .45); }
   }
   body[data-view="today"] #view-journal, body[data-view="journal"] #view-today { display: block; }
   #view-journal { position: sticky; top: 130px; max-height: calc(100vh - 150px); overflow-y: auto; padding-right: 4px; }
-  #view-history, #view-settings { max-width: 680px; margin: 0 auto; }
+  #view-history, #view-settings, #view-projects { max-width: 760px; margin: 0 auto; }
+  .project-grid { grid-template-columns: 1fr 1fr; }
+  .cal-layout {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 36px;
+    grid-template-areas: "month day" "upcoming day"; align-items: start;
+  }
+  .cal-card { grid-area: month; }
+  .cal-day { grid-area: day; }
+  .cal-upcoming { grid-area: upcoming; }
+  .cal-day-title { margin-top: 6px; }
+  .cal-cell { aspect-ratio: auto; height: 56px; }
   .toast { bottom: 28px; }
 }

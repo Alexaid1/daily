@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Daily — чекер дел</title>
-  <meta name="description" content="Ежедневные дела, разовые задачи и журнал с отметками времени">
+  <meta name="description" content="Ежедневные дела, проекты, план дня и журнал с отметками времени">
   <meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#111214" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -23,23 +23,31 @@
 <body data-view="today">
   <header class="topbar">
     <div class="brand">Daily</div>
-    <button class="sync-pill" id="syncPill" type="button" title="Синхронизация">
-      <span class="dot"></span><span class="label">Локально</span>
-    </button>
+    <div class="top-actions">
+      <button class="sync-pill" id="syncPill" type="button" title="Синхронизация">
+        <span class="dot"></span><span class="label">Локально</span>
+      </button>
+      <button class="icon-btn gear" id="gearBtn" type="button" aria-label="Настройки" title="Настройки">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
+    </div>
   </header>
 
   <nav class="tabbar" aria-label="Разделы">
     <button type="button" data-tab="today" class="active">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg><span>Сегодня</span>
     </button>
+    <button type="button" data-tab="projects">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Проекты</span>
+    </button>
+    <button type="button" data-tab="calendar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Календарь</span>
+    </button>
     <button type="button" data-tab="journal" class="tab-journal">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8.5 10h7M8.5 13.5h7M8.5 17h4"/></svg><span>Журнал</span>
     </button>
     <button type="button" data-tab="history">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>История</span>
-    </button>
-    <button type="button" data-tab="settings">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Настройки</span>
     </button>
   </nav>
 
@@ -56,6 +64,8 @@
         <button class="icon-btn" id="dayNext" type="button" aria-label="Следующий день">›</button>
       </div>
 
+      <div id="dayPlan" class="plan-wrap"></div>
+
       <div class="progress card">
         <div class="progress-top">
           <span class="progress-label">Ежедневные дела</span>
@@ -65,6 +75,11 @@
       </div>
 
       <div id="habitList"></div>
+
+      <div id="nextWrap">
+        <h2 class="section-title">Следующие шаги по проектам</h2>
+        <div id="nextSteps"></div>
+      </div>
 
       <h2 class="section-title">Разовые дела</h2>
       <form class="add-task card" id="taskForm" autocomplete="off">
@@ -78,6 +93,36 @@
         </div>
       </form>
       <div id="taskList"></div>
+    </section>
+
+    <!-- ПРОЕКТЫ -->
+    <section class="view" id="view-projects">
+      <div id="projectsView"></div>
+    </section>
+
+    <!-- КАЛЕНДАРЬ -->
+    <section class="view" id="view-calendar">
+      <div class="cal-layout">
+        <div class="card cal-card">
+          <div class="cal-head">
+            <button class="icon-btn" id="calPrev" type="button" aria-label="Предыдущий месяц">‹</button>
+            <div class="cal-month" id="calMonth"></div>
+            <button class="icon-btn" id="calNext" type="button" aria-label="Следующий месяц">›</button>
+          </div>
+          <div class="cal-week"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span></div>
+          <div class="cal-grid" id="calGrid"></div>
+          <button class="link-btn cal-today" id="calToday" type="button">Сегодня</button>
+        </div>
+        <div class="cal-day">
+          <h2 class="cal-day-title" id="calDayTitle"></h2>
+          <div id="calDeadlines"></div>
+          <div id="calPlan" class="plan-wrap"></div>
+        </div>
+        <div class="cal-upcoming">
+          <h2 class="section-title">Ближайшие 14 дней</h2>
+          <div id="upcoming"></div>
+        </div>
+      </div>
     </section>
 
     <!-- ЖУРНАЛ -->
@@ -157,7 +202,7 @@
     </section>
   </main>
 
-  <!-- Диалог: дело -->
+  <!-- Диалог: ежедневное дело -->
   <dialog id="habitDialog">
     <form method="dialog" class="dlg" id="habitDlgForm">
       <h3 id="habitDlgTitle">Дело</h3>
@@ -170,8 +215,84 @@
       <div class="dlg-actions">
         <button class="btn danger-ghost" id="hDelete" type="button">Удалить</button>
         <span class="spacer"></span>
-        <button class="btn" value="cancel" type="button" data-close>Отмена</button>
-        <button class="btn primary" id="hSave" type="submit">Сохранить</button>
+        <button class="btn" type="button" data-close>Отмена</button>
+        <button class="btn primary" type="submit">Сохранить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Диалог: блок времени -->
+  <dialog id="blockDialog">
+    <form method="dialog" class="dlg" id="blockDlgForm">
+      <h3 id="blockDlgTitle">Блок времени</h3>
+      <div class="time-row">
+        <label class="field"><span>С</span><input type="time" id="bStart" required></label>
+        <span class="time-dash">—</span>
+        <label class="field"><span>До</span><input type="time" id="bEnd" required></label>
+      </div>
+      <div class="dur-chips" id="bDurChips">
+        <button type="button" data-min="30">30 мин</button>
+        <button type="button" data-min="60">1 ч</button>
+        <button type="button" data-min="90">1,5 ч</button>
+        <button type="button" data-min="120">2 ч</button>
+        <button type="button" data-min="180">3 ч</button>
+      </div>
+      <label class="field"><span>Что делаю</span><select id="bRef"></select></label>
+      <label class="field"><span>Уточнение (необязательно)</span><input type="text" id="bTitle" placeholder="например, задачи с Контеста"></label>
+      <label class="field"><span id="bDateLabel">Дата</span><input type="date" id="bDate" required></label>
+      <div class="field"><span>Повторять по дням недели</span>
+        <div class="days" id="bDays"></div>
+      </div>
+      <p class="form-error" id="bError" hidden></p>
+      <div class="dlg-actions wrap">
+        <button class="btn danger-ghost" id="bDelete" type="button">Удалить</button>
+        <button class="btn danger-ghost" id="bSkip" type="button">Убрать в этот день</button>
+        <span class="spacer"></span>
+        <button class="btn" type="button" data-close>Отмена</button>
+        <button class="btn primary" type="submit">Сохранить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Диалог: проект -->
+  <dialog id="projectDialog">
+    <form method="dialog" class="dlg" id="projectDlgForm">
+      <h3 id="projectDlgTitle">Проект</h3>
+      <label class="field"><span>Название</span><input type="text" id="pTitle" required></label>
+      <label class="field"><span>Цель в одну строку</span><input type="text" id="pGoal" placeholder="Зачем этот проект"></label>
+      <div class="field"><span>Цвет</span><div class="swatches" id="pColors"></div></div>
+      <div class="field"><span>Статус</span>
+        <div class="seg wide" id="pStatus">
+          <button type="button" data-status="active">В работе</button>
+          <button type="button" data-status="paused">На паузе</button>
+          <button type="button" data-status="done">Завершён</button>
+        </div>
+      </div>
+      <label class="field"><span>Дедлайн проекта (необязательно)</span><input type="date" id="pDeadline"></label>
+      <div class="dlg-actions">
+        <button class="btn danger-ghost" id="pDelete" type="button">Удалить</button>
+        <span class="spacer"></span>
+        <button class="btn" type="button" data-close>Отмена</button>
+        <button class="btn primary" type="submit">Сохранить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Диалог: этап -->
+  <dialog id="stageDialog">
+    <form method="dialog" class="dlg" id="stageDlgForm">
+      <h3>Этап</h3>
+      <label class="field"><span>Название</span><input type="text" id="sTitle" required></label>
+      <label class="field"><span>Дедлайн (необязательно)</span><input type="date" id="sDue"></label>
+      <div class="btn-row">
+        <button class="btn" id="sUp" type="button">↑ Выше</button>
+        <button class="btn" id="sDown" type="button">↓ Ниже</button>
+      </div>
+      <div class="dlg-actions">
+        <button class="btn danger-ghost" id="sDelete" type="button">Удалить</button>
+        <span class="spacer"></span>
+        <button class="btn" type="button" data-close>Отмена</button>
+        <button class="btn primary" type="submit">Сохранить</button>
       </div>
     </form>
   </dialog>

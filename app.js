@@ -2,7 +2,7 @@
 
 /* =========================================================
    Daily — чекер дел
-   Данные: localStorage + (опционально) приватный GitHub Gist.
+   Данные: localStorage + (опционально) секретный GitHub Gist.
    Каждая запись имеет updatedAt; при синхронизации побеждает
    более свежая версия каждой записи, так что правки с телефона
    и компьютера не затирают друг друга.
@@ -14,7 +14,7 @@ const LS_GIST = 'dt_gist_id';
 const LS_THEME = 'dt_theme';
 const GIST_DESC = 'daily-tracker-data';
 const GIST_FILE = 'daily-tracker.json';
-const COLS = ['habits', 'checks', 'tasks', 'notes'];
+const COLS = ['habits', 'checks', 'tasks', 'notes', 'projects', 'stages', 'blocks'];
 
 const CATS = {
   prog:  { name: 'Программирование', color: '#6366f1' },
@@ -23,8 +23,64 @@ const CATS = {
   sql:   { name: 'SQL',              color: '#10b981' },
   other: { name: 'Другое',           color: '#a855f7' },
 };
+const PALETTE = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#a855f7', '#ec4899', '#14b8a6', '#64748b'];
+const STATUS = { active: 'В работе', paused: 'На паузе', done: 'Завершён' };
 // порядок кнопок дней: Пн..Вс → значения Date.getDay()
 const WEEK = [[1, 'Пн'], [2, 'Вт'], [3, 'Ср'], [4, 'Чт'], [5, 'Пт'], [6, 'Сб'], [0, 'Вс']];
+const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+
+/* Стартовые проекты. Фиксированные id + updatedAt=1: добавляются один раз,
+   не задваиваются между устройствами и не возвращаются, если их удалить. */
+const SEED_PROJECTS = [
+  ['p-job', 'Поиск работы', 'Стажировка или работа аналитиком данных — главная цель: Яндекс', '#6366f1', '', [
+    ['Резюме под аналитика данных', '', true],
+    ['Подать заявку на стажировку Яндекса', '2026-10-16'],
+    ['SQL: оконные функции и CTE'],
+    ['Python: базовые задачи на Контесте'],
+    ['Теорвер: Байес и базовые задачи'],
+    ['Пройти контест Яндекса'],
+    ['Заявки: Ozon, Т-Банк, Mars, ОТП'],
+    ['Собеседования'],
+  ]],
+  ['p-strat', 'StratConstruct', 'Конструктор и бэктестер торговых стратегий без кода', '#f59e0b', '', [
+    ['Фондовый рынок: акции'],
+    ['Фундаментальный анализ'],
+    ['Редизайн'],
+    ['Релиз обновления и пост в LinkedIn'],
+  ]],
+  ['p-loc', 'LocAction', 'Урбан-дашборд: пешеходная связность, коммерческая плотность, белые пятна', '#10b981', '', [
+    ['Выбрать город и вертикаль'],
+    ['Собрать данные из OSM / Overpass'],
+    ['Посчитать метрики и найти белые пятна'],
+    ['Интерактивная карта'],
+    ['Деплой и кейс в портфолио'],
+  ]],
+  ['p-ielts', 'IELTS', 'С B1 до IELTS 6.0–6.5; главное слабое место — письмо', '#0ea5e9', '', [
+    ['Пробный Duolingo English Test'],
+    ['Murphy: закрыть слабые темы'],
+    ['Письмо: регулярные эссе с разбором'],
+    ['Пробный IELTS (mock)'],
+    ['Сдать IELTS на 6.0–6.5'],
+  ]],
+  ['p-admit', 'Поступление', 'Магистратура в Европе, старт — сентябрь 2028', '#a855f7', '2028-09-01', [
+    ['Шорт-лист: PoliMI, PoliTO, IUAV, Bauhaus, VUB/ULB'],
+    ['Требования и дедлайны каждой программы'],
+    ['Портфолио'],
+    ['CV и мотивационные письма'],
+    ['Первая волна подачи (Италия)'],
+    ['Остальные заявки'],
+    ['Результаты и выбор программы'],
+  ]],
+  ['p-move', 'Переезд', 'Выехать после диплома, до 1 сентября 2027', '#ef4444', '2027-08-31', [
+    ['Консультация юриста по воинскому учёту (весна 2027)'],
+    ['Накопить 500 тыс ₽'],
+    ['Стабильный онлайн-доход'],
+    ['Защита диплома (июнь 2027)'],
+    ['Выбрать языковую школу на Филиппинах'],
+    ['Билеты и жильё'],
+    ['Выезд'],
+  ]],
+];
 
 /* ---------- утилиты ---------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -35,12 +91,22 @@ const pad = (n) => String(n).padStart(2, '0');
 const dateKey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const parseKey = (k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
 const addDays = (k, n) => { const d = parseKey(k); d.setDate(d.getDate() + n); return dateKey(d); };
+const dayDiff = (a, b) => Math.round((parseKey(b) - parseKey(a)) / 864e5);
 const hhmm = (ts) => { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const toMin = (t) => { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + m; };
+const fromMin = (m) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+const nowMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const byOrder = (a, b) => (a.order || 0) - (b.order || 0);
 const CHECK_SVG = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+const REPEAT_SVG = '<svg class="ico" viewBox="0 0 24 24" aria-label="повторяется"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg>';
 
 function fmtDay(k, opts = { weekday: 'long', day: 'numeric', month: 'long' }) {
   return parseKey(k).toLocaleDateString('ru-RU', opts);
+}
+function shortDate(k) {
+  const sameYear = parseKey(k).getFullYear() === new Date().getFullYear();
+  return fmtDay(k, sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' }).replace(' г.', '');
 }
 function relDay(k) {
   const t = dateKey();
@@ -50,16 +116,19 @@ function relDay(k) {
   return null;
 }
 function plural(n, one, few, many) {
-  const a = n % 10, b = n % 100;
+  const a = Math.abs(n) % 10, b = Math.abs(n) % 100;
   if (a === 1 && b !== 11) return one;
   if (a >= 2 && a <= 4 && (b < 10 || b >= 20)) return few;
   return many;
 }
+function fmtDur(m) {
+  const h = Math.floor(m / 60), mm = m % 60;
+  if (h && mm) return `${h} ч ${mm} мин`;
+  return h ? `${h} ч` : `${mm} мин`;
+}
 
 /* ---------- состояние ---------- */
 function defaultState() {
-  // фиксированные id и updatedAt=1: если два устройства стартуют с нуля,
-  // их стартовые списки совпадут и не задвоятся при синхронизации
   const h = (id, title, cat, order, days = [], hint = '') =>
     [id, { id, title, cat, order, days, hint, updatedAt: 1 }];
   return {
@@ -74,16 +143,27 @@ function defaultState() {
       h('h-trade', 'Разбор графика', 'trade', 7, [], 'запись в журнал наблюдений'),
       h('h-sql', 'SQL', 'sql', 8),
     ]),
-    checks: {},
-    tasks: {},
-    notes: {},
+    checks: {}, tasks: {}, notes: {}, projects: {}, stages: {}, blocks: {},
   };
 }
 
+function seedInto(s) {
+  SEED_PROJECTS.forEach(([id, title, goal, color, deadline, stages], i) => {
+    if (!s.projects[id]) s.projects[id] = { id, title, goal, color, deadline, status: 'active', order: i + 1, createdAt: 1, updatedAt: 1 };
+    stages.forEach(([t, due = '', done = false], j) => {
+      const sid = `${id}-s${j + 1}`;
+      if (!s.stages[sid]) s.stages[sid] = { id: sid, projectId: id, title: t, due, done, doneAt: done ? 1 : 0, order: j + 1, updatedAt: 1 };
+    });
+  });
+  return s;
+}
+
+// сохраняем и неизвестные коллекции — на случай будущих версий
 function normalize(s) {
   const out = { v: 1 };
-  for (const c of COLS) out[c] = (s && typeof s[c] === 'object' && s[c]) || {};
-  return out;
+  if (s && typeof s === 'object') for (const k in s) if (s[k] && typeof s[k] === 'object' && !Array.isArray(s[k])) out[k] = s[k];
+  for (const c of COLS) if (!out[c]) out[c] = {};
+  return seedInto(out);
 }
 
 function loadState() {
@@ -91,7 +171,7 @@ function loadState() {
     const raw = localStorage.getItem(LS_STATE);
     if (raw) return normalize(JSON.parse(raw));
   } catch (e) { /* битые данные — начинаем заново */ }
-  return defaultState();
+  return normalize(defaultState());
 }
 
 let state = loadState();
@@ -103,7 +183,9 @@ function commit() { persistLocal(); render(); scheduleSync(); }
 
 function merge(a, b) {
   const out = { v: 1 };
-  for (const c of COLS) {
+  const keys = new Set([...COLS, ...Object.keys(a || {}), ...Object.keys(b || {})]);
+  keys.delete('v');
+  for (const c of keys) {
     const A = (a && a[c]) || {}, B = (b && b[c]) || {}, o = {};
     for (const id of new Set([...Object.keys(A), ...Object.keys(B)])) {
       const x = A[id], y = B[id];
@@ -120,14 +202,14 @@ function stable(v) {
   return JSON.stringify(v);
 }
 
-/* ---------- модель ---------- */
-const alive = (o) => Object.values(o).filter((x) => x && !x.deleted);
-const habitsSorted = () => alive(state.habits).sort((a, b) => (a.order || 0) - (b.order || 0));
+/* ---------- модель: привычки ---------- */
+const alive = (o) => Object.values(o || {}).filter((x) => x && !x.deleted);
+const habitsSorted = () => alive(state.habits).sort(byOrder);
 const scheduledOn = (h, k) => !h.days || h.days.length === 0 || h.days.includes(parseKey(k).getDay());
-const isDone = (k, hid) => !!(state.checks[k + '|' + hid] && state.checks[k + '|' + hid].done);
+const isDone = (k, id) => !!(state.checks[k + '|' + id] && state.checks[k + '|' + id].done);
 
-function toggleCheck(k, hid) {
-  state.checks[k + '|' + hid] = { done: !isDone(k, hid), updatedAt: now() };
+function toggleCheck(k, id) {
+  state.checks[k + '|' + id] = { done: !isDone(k, id), updatedAt: now() };
   commit();
 }
 
@@ -150,21 +232,158 @@ function bestStreak(h, days = 365) {
 }
 function firstDataDay() {
   let min = null;
-  for (const key in state.checks) { const k = key.split('|')[0]; if (!min || k < min) min = k; }
+  for (const key in state.checks) {
+    const [k, id] = key.split('|');
+    if (!state.habits[id]) continue;
+    if (!min || k < min) min = k;
+  }
   return min;
 }
 
+/* ---------- модель: проекты ---------- */
+const projectsSorted = () => alive(state.projects).sort(byOrder);
+const stagesOf = (pid) => alive(state.stages).filter((s) => s.projectId === pid).sort(byOrder);
+const projectAlive = (pid) => state.projects[pid] && !state.projects[pid].deleted;
+const nextStage = (pid) => stagesOf(pid).find((s) => !s.done);
+
+function toggleStage(sid) {
+  const s = state.stages[sid];
+  if (!s) return;
+  const done = !s.done;
+  state.stages[sid] = { ...s, done, doneAt: done ? now() : 0, updatedAt: now() };
+  commit();
+  if (done) {
+    const nx = nextStage(s.projectId);
+    toast(nx ? `Готово! Дальше: ${nx.title}` : 'Все этапы проекта закрыты 🎉');
+  }
+}
+
+/* ---------- модель: блоки времени ---------- */
+function occursOn(b, k) {
+  if (b.days && b.days.length) return k >= b.date && b.days.includes(parseKey(k).getDay()) && !(b.skip || []).includes(k);
+  return b.date === k;
+}
+const blocksOn = (k) => alive(state.blocks).filter((b) => occursOn(b, k))
+  .sort((a, b) => toMin(a.start) - toMin(b.start) || (a.createdAt || 0) - (b.createdAt || 0));
+
+function refInfo(ref) {
+  if (ref && ref.startsWith('p:')) {
+    const p = state.projects[ref.slice(2)];
+    if (p && !p.deleted) return { name: p.title, color: p.color };
+  }
+  const c = CATS[(ref || '').slice(2)];
+  return c ? { name: c.name, color: c.color } : { name: 'Другое', color: CATS.other.color };
+}
+
+/* ---------- модель: дедлайны ---------- */
+function allDeadlines() {
+  const items = [];
+  for (const t of alive(state.tasks)) if (t.due) items.push({ kind: 'task', id: t.id, date: t.due, title: t.title, sub: 'Разовое дело', done: t.done, color: 'var(--muted)' });
+  for (const s of alive(state.stages)) {
+    if (!s.due || !projectAlive(s.projectId)) continue;
+    const p = state.projects[s.projectId];
+    items.push({ kind: 'stage', id: s.id, pid: p.id, date: s.due, title: s.title, sub: p.title, done: s.done, color: p.color });
+  }
+  for (const p of alive(state.projects)) if (p.deadline) items.push({ kind: 'project', id: p.id, pid: p.id, date: p.deadline, title: `Дедлайн: ${p.title}`, sub: 'Проект', done: p.status === 'done', color: p.color });
+  return items.sort((a, b) => a.date.localeCompare(b.date));
+}
+
 /* ---------- UI-состояние ---------- */
-const ui = { view: 'today', day: dateKey(), noteFilter: 'all', noteQuery: '', important: false, editHabit: null, editNote: null };
+const VIEWS = ['today', 'projects', 'calendar', 'journal', 'history', 'settings'];
+const ui = {
+  view: 'today', day: dateKey(), noteFilter: 'all', noteQuery: '', important: false,
+  project: null, calMonth: dateKey().slice(0, 7), calDay: dateKey(),
+  editHabit: null, editNote: null, editBlock: null, blockDate: null, editProject: null, editStage: null,
+};
+const isWide = () => window.matchMedia('(min-width: 960px)').matches;
 
 function setView(v) {
   ui.view = v;
   document.body.dataset.view = v;
   $$('.tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === v || (v === 'journal' && b.dataset.tab === 'today' && isWide())));
+  $('#gearBtn').classList.toggle('active', v === 'settings');
   if (location.hash.slice(1) !== v) history.replaceState(null, '', '#' + v);
   window.scrollTo({ top: 0 });
 }
-const isWide = () => window.matchMedia('(min-width: 960px)').matches;
+
+/* ---------- общие куски разметки ---------- */
+function dueLabel(item) {
+  if (!item.due) return '';
+  const today = dateKey();
+  if (!item.done && item.due < today) return `<span class="due overdue">просрочено · ${shortDate(item.due)}</span>`;
+  if (item.due === today) return `<span class="due today">сегодня</span>`;
+  const rel = relDay(item.due);
+  const left = dayDiff(today, item.due);
+  return `<span class="due">${rel || shortDate(item.due)}${!rel && left > 0 && left <= 30 && !item.done ? ` · через ${left} ${plural(left, 'день', 'дня', 'дней')}` : ''}</span>`;
+}
+
+function deadlineLabel(p) {
+  if (!p.deadline) return '';
+  const left = dayDiff(dateKey(), p.deadline);
+  if (p.status === 'done') return `до ${shortDate(p.deadline)}`;
+  if (left < 0) return `<span class="overdue">просрочен на ${-left} ${plural(-left, 'день', 'дня', 'дней')}</span>`;
+  if (left === 0) return `<span class="today">дедлайн сегодня</span>`;
+  return `до ${shortDate(p.deadline)} · ${left} ${plural(left, 'день', 'дня', 'дней')}`;
+}
+
+/* ---------- План дня (используется на «Сегодня» и в календаре) ---------- */
+function renderPlan(k, el) {
+  const list = blocksOn(k);
+  const isToday = k === dateKey();
+  const nm = nowMin();
+  const total = list.reduce((s, b) => s + Math.max(0, toMin(b.end) - toMin(b.start)), 0);
+  const head = `<div class="section-head">
+    <h2 class="section-title">План дня</h2>
+    ${total ? `<span class="section-meta">${fmtDur(total)}</span>` : ''}
+    <button type="button" class="add-btn" data-add-block="${k}">+ Блок</button>
+  </div>`;
+
+  if (!list.length) {
+    el.innerHTML = head + `<button type="button" class="card empty-plan" data-add-block="${k}">
+      <strong>Распиши день по времени</strong><span>Например, 19:00–21:00 — программирование. Повторяющиеся блоки создаются один раз.</span>
+    </button>`;
+    return;
+  }
+
+  let rows = '', prevEnd = null;
+  for (const b of list) {
+    const s = toMin(b.start), e = toMin(b.end);
+    if (prevEnd !== null && s - prevEnd >= 30) rows += `<div class="gap">свободно ${fmtDur(s - prevEnd)}</div>`;
+    const overlap = prevEnd !== null && s < prevEnd;
+    prevEnd = prevEnd === null ? e : Math.max(prevEnd, e);
+    const info = refInfo(b.ref);
+    const done = isDone(k, b.id);
+    const nowCls = isToday && nm >= s && nm < e ? 'now' : '';
+    const past = isToday && nm >= e && !done ? 'past' : '';
+    let meta = `<span class="chip-dot" style="background:${info.color}"></span>${esc(info.name)}`;
+    if (b.days && b.days.length) meta += ` ${REPEAT_SVG}`;
+    if (nowCls) meta += ` · <b class="now-label">сейчас, ещё ${fmtDur(e - nm)}</b>`;
+    if (overlap) meta += ` · <span class="overdue">пересекается</span>`;
+    rows += `<div class="block ${done ? 'done' : ''} ${nowCls} ${past}" data-bid="${esc(b.id)}" data-date="${k}" style="--c:${info.color}">
+      <button type="button" class="check" data-act="bcheck" aria-label="Выполнено">${CHECK_SVG}</button>
+      <button type="button" class="block-body" data-act="bedit">
+        <span class="block-time">${b.start}–${b.end}<span class="block-dur">${fmtDur(e - s)}</span></span>
+        <span class="block-title">${esc(b.title || info.name)}</span>
+        <span class="block-meta">${meta}</span>
+      </button>
+    </div>`;
+  }
+  el.innerHTML = head + `<div class="list card">${rows}</div>`;
+}
+
+function bindPlan(el) {
+  el.addEventListener('click', (e) => {
+    const add = e.target.closest('[data-add-block]');
+    if (add) return openBlock(null, add.dataset.addBlock);
+    const act = e.target.closest('[data-act]');
+    const row = e.target.closest('.block');
+    if (!act || !row) return;
+    const b = state.blocks[row.dataset.bid];
+    if (!b) return;
+    if (act.dataset.act === 'bcheck') toggleCheck(row.dataset.date, b.id);
+    else openBlock(b, row.dataset.date);
+  });
+}
 
 /* ---------- отрисовка: Сегодня ---------- */
 function habitRow(h, k) {
@@ -186,6 +405,8 @@ function renderToday() {
   $('#daySub').textContent = fmtDay(k, rel ? { weekday: 'long', day: 'numeric', month: 'long' } : { day: 'numeric', month: 'long' });
   $('#dayToday').hidden = k === today;
   $('#dayNext').disabled = k >= today;
+
+  renderPlan(k, $('#dayPlan'));
 
   const all = habitsSorted();
   const on = all.filter((h) => scheduledOn(h, k));
@@ -214,17 +435,34 @@ function renderToday() {
   $('#habitList').innerHTML = html;
   if (open) $('#habitList details.offday').open = true;
 
+  renderNextSteps();
   renderTasks();
 }
 
-function dueLabel(t) {
-  if (!t.due) return '';
-  const today = dateKey();
-  const rel = relDay(t.due);
-  if (!t.done && t.due < today) return `<span class="due overdue">просрочено · ${fmtDay(t.due, { day: 'numeric', month: 'short' })}</span>`;
-  if (t.due === today) return `<span class="due today">сегодня</span>`;
-  return `<span class="due">${rel || fmtDay(t.due, { weekday: 'short', day: 'numeric', month: 'short' })}</span>`;
+function stageRow(s, p, withProject) {
+  return `<div class="task stage ${s.done ? 'done' : ''}" data-sid="${esc(s.id)}" style="--c:${p.color}">
+    <button type="button" class="check" data-act="stoggle" aria-label="${s.done ? 'Вернуть' : 'Выполнено'}">${CHECK_SVG}</button>
+    <button type="button" class="task-body as-btn" data-act="${withProject ? 'sopen' : 'sedit'}">
+      <span class="task-title">${esc(s.title)}</span>
+      <span class="task-sub">${withProject ? `<span class="chip-dot" style="background:${p.color}"></span>${esc(p.title)}` : ''}${withProject && s.due ? ' · ' : ''}${dueLabel(s)}</span>
+    </button>
+  </div>`;
 }
+
+function renderNextSteps() {
+  const show = ui.day === dateKey();
+  const rows = [];
+  if (show) {
+    for (const p of projectsSorted()) {
+      if (p.status !== 'active') continue;
+      const s = nextStage(p.id);
+      if (s) rows.push(stageRow(s, p, true));
+    }
+  }
+  $('#nextWrap').hidden = !rows.length;
+  $('#nextSteps').innerHTML = rows.length ? `<div class="list card">${rows.join('')}</div>` : '';
+}
+
 function taskRow(t) {
   return `<div class="task ${t.done ? 'done' : ''}" data-tid="${esc(t.id)}">
     <button type="button" class="check" data-act="toggle" aria-label="${t.done ? 'Вернуть' : 'Выполнено'}">${CHECK_SVG}</button>
@@ -236,7 +474,7 @@ function taskRow(t) {
 function renderTasks() {
   const today = dateKey();
   const tasks = alive(state.tasks);
-  const byDue = (a, b) => (a.due || '9999') .localeCompare(b.due || '9999') || a.createdAt - b.createdAt;
+  const byDue = (a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.createdAt - b.createdAt;
   const current = tasks.filter((t) => !t.done && (!t.due || t.due <= today)).sort(byDue);
   const later = tasks.filter((t) => !t.done && t.due && t.due > today).sort(byDue);
   const doneToday = tasks.filter((t) => t.done && t.doneAt && dateKey(new Date(t.doneAt)) === today).sort((a, b) => b.doneAt - a.doneAt);
@@ -253,11 +491,138 @@ function renderTasks() {
   $('#taskList').innerHTML = html;
 }
 
+/* ---------- отрисовка: Проекты ---------- */
+function projectCard(p) {
+  const st = stagesOf(p.id);
+  const done = st.filter((s) => s.done).length;
+  const pct = st.length ? Math.round(done / st.length * 100) : 0;
+  const nx = st.find((s) => !s.done);
+  return `<button type="button" class="card project-card" data-pid="${esc(p.id)}" style="--c:${p.color}">
+    <span class="pc-top">
+      <span class="pc-title">${esc(p.title)}</span>
+      <span class="pc-count">${done}/${st.length}</span>
+    </span>
+    ${p.goal ? `<span class="pc-goal">${esc(p.goal)}</span>` : ''}
+    <span class="bar"><span class="bar-fill" style="width:${pct}%"></span></span>
+    <span class="pc-meta">
+      ${nx ? `<span class="pc-next">Дальше: ${esc(nx.title)}${nx.due ? ' · ' + dueLabel(nx) : ''}</span>` : `<span class="pc-next">${st.length ? 'Все этапы закрыты' : 'Этапов пока нет'}</span>`}
+      ${p.deadline ? `<span class="pc-deadline">${deadlineLabel(p)}</span>` : ''}
+    </span>
+  </button>`;
+}
+
+function renderProjects() {
+  const el = $('#projectsView');
+  if (ui.project && projectAlive(ui.project)) return renderProjectDetail(el, state.projects[ui.project]);
+  ui.project = null;
+  const ps = projectsSorted();
+  const active = ps.filter((p) => p.status === 'active');
+  const paused = ps.filter((p) => p.status === 'paused');
+  const done = ps.filter((p) => p.status === 'done');
+  let html = `<div class="section-head first"><h2 class="section-title">Проекты в работе</h2><button type="button" class="add-btn" id="projectAdd">+ Проект</button></div>`;
+  html += active.length ? `<div class="project-grid">${active.map(projectCard).join('')}</div>` : `<div class="card empty">Активных проектов нет</div>`;
+  if (paused.length) html += `<details class="later"><summary>На паузе (${paused.length})</summary><div class="project-grid">${paused.map(projectCard).join('')}</div></details>`;
+  if (done.length) html += `<details class="later"><summary>Завершённые (${done.length})</summary><div class="project-grid">${done.map(projectCard).join('')}</div></details>`;
+  const openStates = $$('#projectsView details').map((d) => d.open);
+  el.innerHTML = html;
+  $$('#projectsView details').forEach((d, i) => { if (openStates[i]) d.open = true; });
+}
+
+function renderProjectDetail(el, p) {
+  const st = stagesOf(p.id);
+  const done = st.filter((s) => s.done).length;
+  const pct = st.length ? Math.round(done / st.length * 100) : 0;
+  el.innerHTML = `
+    <div class="pd-nav">
+      <button type="button" class="link-btn" id="projectBack">‹ Все проекты</button>
+      <button type="button" class="btn small-btn" id="projectEdit">Изменить</button>
+    </div>
+    <div class="card pd-head" style="--c:${p.color}">
+      <div class="pd-title-row"><h1 class="pd-title">${esc(p.title)}</h1><span class="status-chip s-${p.status}">${STATUS[p.status] || ''}</span></div>
+      ${p.goal ? `<p class="pd-goal">${esc(p.goal)}</p>` : ''}
+      <div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>
+      <div class="pd-meta"><span>${done} из ${st.length} ${plural(st.length, 'этапа', 'этапов', 'этапов')}</span>${p.deadline ? `<span>${deadlineLabel(p)}</span>` : ''}</div>
+    </div>
+    <h2 class="section-title">Этапы</h2>
+    ${st.length ? `<div class="list card" id="stageList">${st.map((s) => stageRow(s, p, false)).join('')}</div>` : `<div class="card empty">Добавь первый этап — маленький и конкретный</div>`}
+    <form class="add-task card add-stage" id="stageForm" autocomplete="off">
+      <input type="text" id="stageTitle" placeholder="Новый этап…" enterkeyhint="done" required>
+      <div class="add-task-row">
+        <label class="date-chip"><span>Срок</span><input type="date" id="stageDue"></label>
+        <button class="btn primary" type="submit">Добавить</button>
+      </div>
+    </form>`;
+}
+
+/* ---------- отрисовка: Календарь ---------- */
+function renderCalendar() {
+  const today = dateKey();
+  const [y, m] = ui.calMonth.split('-').map(Number);
+  $('#calMonth').textContent = `${MONTHS[m - 1]} ${y}`;
+  const first = `${ui.calMonth}-01`;
+  const start = addDays(first, -((parseKey(first).getDay() + 6) % 7));
+  const lastDay = new Date(y, m, 0).getDate();
+  const last = `${ui.calMonth}-${pad(lastDay)}`;
+  const end = addDays(last, (7 - parseKey(last).getDay()) % 7);
+
+  const dl = allDeadlines();
+  const byDate = {};
+  for (const d of dl) (byDate[d.date] = byDate[d.date] || []).push(d);
+
+  let html = '';
+  for (let k = start; k <= end; k = addDays(k, 1)) {
+    const items = byDate[k] || [];
+    const dots = items.slice(0, 3).map((d) => `<i style="background:${d.color}" class="${d.done ? 'dim' : ''}"></i>`).join('');
+    // отметка «есть план» — только для разовых блоков, иначе повторяющиеся (работа) зашумят всю сетку
+    const plan = blocksOn(k).some((x) => !(x.days && x.days.length)) ? '<b class="has-plan"></b>' : '';
+    const cls = [k.slice(0, 7) !== ui.calMonth ? 'out' : '', k === today ? 'is-today' : '', k === ui.calDay ? 'sel' : '', k < today ? 'past' : ''].join(' ');
+    html += `<button type="button" class="cal-cell ${cls}" data-day="${k}"><span class="cal-num">${parseKey(k).getDate()}</span><span class="cal-dots">${dots}</span>${plan}</button>`;
+  }
+  $('#calGrid').innerHTML = html;
+  $('#calToday').hidden = ui.calMonth === today.slice(0, 7) && ui.calDay === today;
+
+  // выбранный день
+  const k = ui.calDay;
+  const rel = relDay(k);
+  $('#calDayTitle').textContent = (rel ? rel[0].toUpperCase() + rel.slice(1) + ', ' : '') + fmtDay(k, { weekday: rel ? 'short' : 'long', day: 'numeric', month: 'long' });
+  const dayItems = byDate[k] || [];
+  $('#calDeadlines').innerHTML = dayItems.length
+    ? `<div class="section-head"><h2 class="section-title">Дедлайны</h2></div><div class="list card">${dayItems.map((d) => deadlineRow(d, false)).join('')}</div>`
+    : '';
+  renderPlan(k, $('#calPlan'));
+
+  // ближайшие 14 дней + просроченное
+  const horizon = addDays(today, 14);
+  const overdue = dl.filter((d) => !d.done && d.date < today && d.kind !== 'project');
+  const soon = dl.filter((d) => d.date >= today && d.date <= horizon);
+  let up = '';
+  if (overdue.length) up += `<div class="list card overdue-card">${overdue.map((d) => deadlineRow(d, true)).join('')}</div>`;
+  up += soon.length
+    ? `<div class="list card">${soon.map((d) => deadlineRow(d, true)).join('')}</div>`
+    : `<div class="card empty">В ближайшие две недели дедлайнов нет. Поставь сроки этапам в проектах — они появятся здесь.</div>`;
+  $('#upcoming').innerHTML = up;
+}
+
+function deadlineRow(d, withDate) {
+  const today = dateKey();
+  const overdue = !d.done && d.date < today;
+  const checkable = d.kind !== 'project';
+  const dateTxt = d.date === today ? 'сегодня' : (relDay(d.date) || shortDate(d.date));
+  return `<div class="task dl ${d.done ? 'done' : ''}" data-kind="${d.kind}" data-id="${esc(d.id)}" data-pid="${esc(d.pid || '')}" style="--c:${d.color}">
+    ${checkable ? `<button type="button" class="check" data-act="dltoggle" aria-label="Выполнено">${CHECK_SVG}</button>` : `<span class="flag" style="color:${d.color}">⚑</span>`}
+    <button type="button" class="task-body as-btn" data-act="dlopen">
+      <span class="task-title">${esc(d.title)}</span>
+      <span class="task-sub"><span class="chip-dot" style="background:${d.color}"></span>${esc(d.sub)}</span>
+    </button>
+    ${withDate ? `<span class="dl-date ${overdue ? 'overdue' : d.date === today ? 'today' : ''}">${dateTxt}</span>` : ''}
+  </div>`;
+}
+
 /* ---------- отрисовка: Журнал ---------- */
 function highlight(text, q) {
   let html = esc(text).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
   if (q) {
-    const re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')(?![^<]*>)', 'gi');
+    const re = new RegExp('(' + esc(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')(?![^<]*>)', 'gi');
     html = html.replace(re, '<mark>$1</mark>');
   }
   return html;
@@ -296,7 +661,6 @@ function renderHistory() {
   const today = dateKey();
   const habits = habitsSorted();
   const first = firstDataDay() || today;
-  // начало сетки — понедельник 15 недель назад
   const t = parseKey(today);
   const mondayOffset = (t.getDay() + 6) % 7;
   let k = addDays(today, -mondayOffset - 15 * 7);
@@ -323,12 +687,11 @@ function renderHistory() {
     }
     const pct = sched ? Math.round(done / sched * 100) : 0;
     const cat = CATS[h.cat] || CATS.other;
-    const cur = currentStreak(h), best = bestStreak(h);
     return `<div class="stat" style="--c:${cat.color}">
       <div class="stat-title"><span class="swatch" style="background:${cat.color}"></span>${esc(h.title)}</div>
       <div class="stat-pct">${pct}%</div>
       <div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>
-      <div class="stat-meta">${done} из ${sched} · серия ${cur} · рекорд ${best}</div>
+      <div class="stat-meta">${done} из ${sched} · серия ${currentStreak(h)} · рекорд ${bestStreak(h)}</div>
     </div>`;
   }).join('')}</div>` : `<div class="card empty">Нет дел</div>`;
 }
@@ -350,13 +713,16 @@ function renderSettings() {
     </div>`;
   }).join('') || '<div class="empty">Список пуст</div>'}</div>`;
 
-  const theme = localStorage.getItem(LS_THEME) || 'auto';
+  let theme = 'auto';
+  try { theme = localStorage.getItem(LS_THEME) || 'auto'; } catch (e) {}
   $$('#themeSeg button').forEach((b) => b.classList.toggle('active', b.dataset.theme === theme));
   renderSync();
 }
 
 function render() {
   renderToday();
+  renderProjects();
+  renderCalendar();
   renderJournal();
   renderHistory();
   renderSettings();
@@ -364,7 +730,7 @@ function render() {
 
 /* ---------- синхронизация (GitHub Gist) ---------- */
 const sync = { busy: false, again: false, timer: null, state: 'off', lastAt: 0, login: '', error: '' };
-const token = () => localStorage.getItem(LS_TOKEN) || '';
+const token = () => { try { return localStorage.getItem(LS_TOKEN) || ''; } catch (e) { return ''; } };
 
 function setSync(s, error = '') {
   sync.state = s; sync.error = error;
@@ -489,6 +855,10 @@ async function connectToken(t) {
 }
 
 /* ---------- диалоги ---------- */
+function daysButtons(el, days) {
+  el.innerHTML = WEEK.map(([d, n]) => `<button type="button" data-d="${d}" class="${days.includes(d) ? 'on' : ''}">${n}</button>`).join('');
+}
+
 function openHabit(h) {
   ui.editHabit = h ? h.id : null;
   $('#habitDlgTitle').textContent = h ? 'Редактировать дело' : 'Новое дело';
@@ -496,11 +866,88 @@ function openHabit(h) {
   $('#hHint').value = h ? h.hint || '' : '';
   $('#hCat').innerHTML = Object.entries(CATS).map(([id, c]) => `<option value="${id}">${esc(c.name)}</option>`).join('');
   $('#hCat').value = h && CATS[h.cat] ? h.cat : 'other';
-  const days = h ? h.days || [] : [];
-  $('#hDays').innerHTML = WEEK.map(([d, n]) => `<button type="button" data-d="${d}" class="${days.includes(d) ? 'on' : ''}">${n}</button>`).join('');
+  daysButtons($('#hDays'), h ? h.days || [] : []);
   $('#hDelete').hidden = !h;
   $('#habitDialog').showModal();
   if (!h) $('#hTitle').focus();
+}
+
+function suggestTimes(k) {
+  const list = blocksOn(k);
+  let start = list.length ? Math.max(...list.map((b) => toMin(b.end))) : 9 * 60;
+  if (k === dateKey()) start = Math.max(start, Math.ceil(nowMin() / 30) * 30);
+  start = Math.min(start, 22 * 60);
+  return [fromMin(start), fromMin(Math.min(start + 60, 23 * 60 + 59))];
+}
+function blockRefOptions(selected) {
+  let html = '<optgroup label="Направления">' + Object.entries(CATS).map(([id, c]) => `<option value="c:${id}">${esc(c.name)}</option>`).join('') + '</optgroup>';
+  const ps = projectsSorted().filter((p) => p.status !== 'done' || 'p:' + p.id === selected);
+  if (ps.length) html += '<optgroup label="Проекты">' + ps.map((p) => `<option value="p:${esc(p.id)}">${esc(p.title)}</option>`).join('') + '</optgroup>';
+  return html;
+}
+function updateBlockDateLabel() {
+  $('#bDateLabel').textContent = $$('#bDays button.on').length ? 'Начиная с' : 'Дата';
+}
+function openBlock(b, k) {
+  ui.editBlock = b ? b.id : null;
+  ui.blockDate = k;
+  const [s, e] = b ? [b.start, b.end] : suggestTimes(k);
+  $('#blockDlgTitle').textContent = b ? 'Блок времени' : 'Новый блок';
+  $('#bStart').value = s;
+  $('#bEnd').value = e;
+  $('#bRef').innerHTML = blockRefOptions(b ? b.ref : '');
+  $('#bRef').value = b ? b.ref : 'c:prog';
+  if (!$('#bRef').value) $('#bRef').value = 'c:other';
+  $('#bTitle').value = b ? b.title || '' : '';
+  $('#bDate').value = b ? b.date : k;
+  daysButtons($('#bDays'), b ? b.days || [] : []);
+  updateBlockDateLabel();
+  $('#bError').hidden = true;
+  $('#bDelete').hidden = !b;
+  $('#bDelete').textContent = b && b.days && b.days.length ? 'Удалить серию' : 'Удалить';
+  $('#bSkip').hidden = !(b && b.days && b.days.length);
+  $('#blockDialog').showModal();
+}
+
+function openProject(p) {
+  ui.editProject = p ? p.id : null;
+  $('#projectDlgTitle').textContent = p ? 'Проект' : 'Новый проект';
+  $('#pTitle').value = p ? p.title : '';
+  $('#pGoal').value = p ? p.goal || '' : '';
+  $('#pDeadline').value = p ? p.deadline || '' : '';
+  const used = new Set(projectsSorted().map((x) => x.color));
+  const color = p ? p.color : (PALETTE.find((c) => !used.has(c)) || PALETTE[0]);
+  $('#pColors').innerHTML = PALETTE.map((c) => `<button type="button" data-color="${c}" class="${c === color ? 'on' : ''}" style="background:${c}" aria-label="Цвет ${c}"></button>`).join('');
+  const status = p ? p.status : 'active';
+  $$('#pStatus button').forEach((b) => b.classList.toggle('active', b.dataset.status === status));
+  $('#pDelete').hidden = !p;
+  $('#projectDialog').showModal();
+  if (!p) $('#pTitle').focus();
+}
+
+function openStage(s) {
+  ui.editStage = s.id;
+  $('#sTitle').value = s.title;
+  $('#sDue').value = s.due || '';
+  const list = stagesOf(s.projectId);
+  const i = list.findIndex((x) => x.id === s.id);
+  $('#sUp').disabled = i <= 0;
+  $('#sDown').disabled = i >= list.length - 1;
+  $('#stageDialog').showModal();
+}
+
+function moveStage(dir) {
+  const s = state.stages[ui.editStage];
+  if (!s) return;
+  const list = stagesOf(s.projectId);
+  const i = list.findIndex((x) => x.id === s.id), j = i + dir;
+  if (j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  const t = now();
+  list.forEach((x, idx) => { if (x.order !== idx + 1) state.stages[x.id] = { ...x, order: idx + 1, updatedAt: t }; });
+  commit();
+  $('#sUp').disabled = j <= 0;
+  $('#sDown').disabled = j >= list.length - 1;
 }
 
 function openNote(n) {
@@ -512,6 +959,12 @@ function openNote(n) {
   $('#noteDialog').showModal();
 }
 
+function goProject(pid) {
+  ui.project = pid;
+  renderProjects();
+  setView('projects');
+}
+
 /* ---------- тост ---------- */
 let toastTimer;
 function toast(msg) {
@@ -519,12 +972,16 @@ function toast(msg) {
   el.textContent = msg;
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
 }
 
 /* ---------- события ---------- */
 function bind() {
-  $$('.tabbar button').forEach((b) => b.addEventListener('click', () => setView(b.dataset.tab)));
+  $$('.tabbar button').forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.tab === 'projects') { ui.project = null; renderProjects(); }
+    setView(b.dataset.tab);
+  }));
+  $('#gearBtn').addEventListener('click', () => setView(ui.view === 'settings' ? 'today' : 'settings'));
   $('#syncPill').addEventListener('click', () => setView('settings'));
 
   // дни
@@ -532,10 +989,25 @@ function bind() {
   $('#dayNext').addEventListener('click', () => { if (ui.day < dateKey()) { ui.day = addDays(ui.day, 1); renderToday(); } });
   $('#dayToday').addEventListener('click', () => { ui.day = dateKey(); renderToday(); });
 
+  // план дня
+  bindPlan($('#dayPlan'));
+  bindPlan($('#calPlan'));
+
   // привычки
   $('#habitList').addEventListener('click', (e) => {
     const b = e.target.closest('.habit');
     if (b) toggleCheck(ui.day, b.dataset.hid);
+  });
+
+  // следующие шаги
+  $('#nextSteps').addEventListener('click', (e) => {
+    const act = e.target.closest('[data-act]');
+    const row = e.target.closest('.stage');
+    if (!act || !row) return;
+    const s = state.stages[row.dataset.sid];
+    if (!s) return;
+    if (act.dataset.act === 'stoggle') toggleStage(s.id);
+    else goProject(s.projectId);
   });
 
   // разовые дела
@@ -565,9 +1037,168 @@ function bind() {
     }
   });
 
+  // проекты
+  $('#projectsView').addEventListener('click', (e) => {
+    if (e.target.closest('#projectAdd')) return openProject(null);
+    if (e.target.closest('#projectBack')) { ui.project = null; renderProjects(); window.scrollTo({ top: 0 }); return; }
+    if (e.target.closest('#projectEdit')) return openProject(state.projects[ui.project]);
+    const card = e.target.closest('.project-card');
+    if (card) { ui.project = card.dataset.pid; renderProjects(); window.scrollTo({ top: 0 }); return; }
+    const act = e.target.closest('[data-act]');
+    const row = e.target.closest('.stage');
+    if (act && row && state.stages[row.dataset.sid]) {
+      if (act.dataset.act === 'stoggle') toggleStage(row.dataset.sid);
+      else openStage(state.stages[row.dataset.sid]);
+    }
+  });
+  $('#projectsView').addEventListener('submit', (e) => {
+    if (e.target.id !== 'stageForm') return;
+    e.preventDefault();
+    const title = $('#stageTitle').value.trim();
+    if (!title || !ui.project) return;
+    const list = stagesOf(ui.project);
+    const id = uid(), t = now();
+    state.stages[id] = { id, projectId: ui.project, title, due: $('#stageDue').value || '', done: false, doneAt: 0, order: (list.length ? Math.max(...list.map((s) => s.order || 0)) : 0) + 1, createdAt: t, updatedAt: t };
+    commit();
+    $('#stageTitle').focus();
+  });
+  $('#pColors').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    $$('#pColors button').forEach((x) => x.classList.toggle('on', x === b));
+  });
+  $$('#pStatus button').forEach((b) => b.addEventListener('click', () => {
+    $$('#pStatus button').forEach((x) => x.classList.toggle('active', x === b));
+  }));
+  $('#projectDlgForm').addEventListener('submit', () => {
+    const title = $('#pTitle').value.trim();
+    if (!title) return;
+    const base = ui.editProject ? state.projects[ui.editProject]
+      : { id: uid(), order: (projectsSorted().length ? Math.max(...projectsSorted().map((p) => p.order || 0)) : 0) + 1, createdAt: now() };
+    state.projects[base.id] = {
+      ...base, title,
+      goal: $('#pGoal').value.trim(),
+      color: $('#pColors button.on')?.dataset.color || PALETTE[0],
+      status: $('#pStatus button.active')?.dataset.status || 'active',
+      deadline: $('#pDeadline').value || '',
+      updatedAt: now(),
+    };
+    if (!ui.editProject) ui.project = base.id;
+    commit();
+  });
+  $('#pDelete').addEventListener('click', () => {
+    const p = state.projects[ui.editProject];
+    if (!p || !confirm(`Удалить проект «${p.title}» вместе с этапами?`)) return;
+    state.projects[p.id] = { ...p, deleted: true, updatedAt: now() };
+    $('#projectDialog').close();
+    ui.project = null;
+    commit();
+  });
+  $('#stageDlgForm').addEventListener('submit', () => {
+    const s = state.stages[ui.editStage];
+    const title = $('#sTitle').value.trim();
+    if (!s || !title) return;
+    state.stages[s.id] = { ...s, title, due: $('#sDue').value || '', updatedAt: now() };
+    commit();
+  });
+  $('#sUp').addEventListener('click', () => moveStage(-1));
+  $('#sDown').addEventListener('click', () => moveStage(1));
+  $('#sDelete').addEventListener('click', () => {
+    const s = state.stages[ui.editStage];
+    if (!s || !confirm('Удалить этап?')) return;
+    state.stages[s.id] = { ...s, deleted: true, updatedAt: now() };
+    $('#stageDialog').close();
+    commit();
+  });
+
+  // блоки времени
+  $('#bDays').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (b) { b.classList.toggle('on'); updateBlockDateLabel(); }
+  });
+  $('#bDurChips').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const s = toMin($('#bStart').value || '09:00');
+    $('#bEnd').value = fromMin(Math.min(s + Number(b.dataset.min), 23 * 60 + 59));
+  });
+  $('#bStart').addEventListener('change', () => {
+    // сдвигаем конец, сохраняя длительность
+    const b = ui.editBlock && state.blocks[ui.editBlock];
+    const dur = b ? toMin(b.end) - toMin(b.start) : 60;
+    const s = toMin($('#bStart').value);
+    if (toMin($('#bEnd').value) <= s) $('#bEnd').value = fromMin(Math.min(s + dur, 23 * 60 + 59));
+  });
+  $('#blockDlgForm').addEventListener('submit', (e) => {
+    const start = $('#bStart').value, end = $('#bEnd').value, date = $('#bDate').value;
+    const err = !start || !end ? 'Укажи время начала и конца'
+      : toMin(end) <= toMin(start) ? 'Конец должен быть позже начала'
+      : !date ? 'Укажи дату' : '';
+    if (err) { e.preventDefault(); $('#bError').textContent = err; $('#bError').hidden = false; return; }
+    const days = $$('#bDays button.on').map((b) => Number(b.dataset.d));
+    const base = ui.editBlock ? state.blocks[ui.editBlock] : { id: uid(), createdAt: now(), skip: [] };
+    state.blocks[base.id] = { ...base, start, end, date, days, ref: $('#bRef').value, title: $('#bTitle').value.trim(), updatedAt: now() };
+    commit();
+  });
+  $('#bDelete').addEventListener('click', () => {
+    const b = state.blocks[ui.editBlock];
+    if (!b) return;
+    const series = b.days && b.days.length;
+    if (series && !confirm('Удалить блок из всех дней?')) return;
+    state.blocks[b.id] = { ...b, deleted: true, updatedAt: now() };
+    $('#blockDialog').close();
+    commit();
+  });
+  $('#bSkip').addEventListener('click', () => {
+    const b = state.blocks[ui.editBlock];
+    if (!b) return;
+    state.blocks[b.id] = { ...b, skip: [...new Set([...(b.skip || []), ui.blockDate])], updatedAt: now() };
+    $('#blockDialog').close();
+    commit();
+    toast('Убрано только из этого дня');
+  });
+
+  // календарь
+  const shiftMonth = (n) => {
+    const [y, m] = ui.calMonth.split('-').map(Number);
+    const d = new Date(y, m - 1 + n, 1);
+    ui.calMonth = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+    renderCalendar();
+  };
+  $('#calPrev').addEventListener('click', () => shiftMonth(-1));
+  $('#calNext').addEventListener('click', () => shiftMonth(1));
+  $('#calToday').addEventListener('click', () => { ui.calDay = dateKey(); ui.calMonth = ui.calDay.slice(0, 7); renderCalendar(); });
+  $('#calGrid').addEventListener('click', (e) => {
+    const c = e.target.closest('.cal-cell');
+    if (!c) return;
+    ui.calDay = c.dataset.day;
+    if (ui.calDay.slice(0, 7) !== ui.calMonth) ui.calMonth = ui.calDay.slice(0, 7);
+    renderCalendar();
+    if (!isWide()) $('.cal-day').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  const onDeadlineClick = (e) => {
+    const act = e.target.closest('[data-act]');
+    const row = e.target.closest('.dl');
+    if (!act || !row) return;
+    const { kind, id, pid } = row.dataset;
+    if (act.dataset.act === 'dltoggle') {
+      if (kind === 'stage') return toggleStage(id);
+      const t = state.tasks[id];
+      if (t) { state.tasks[id] = { ...t, done: !t.done, doneAt: t.done ? 0 : now(), updatedAt: now() }; commit(); }
+    } else if (pid) goProject(pid);
+    else if (kind === 'task') { const t = state.tasks[id]; if (t && t.due) { ui.calDay = t.due; ui.calMonth = t.due.slice(0, 7); renderCalendar(); } }
+  };
+  $('#calDeadlines').addEventListener('click', onDeadlineClick);
+  $('#upcoming').addEventListener('click', onDeadlineClick);
+
   // журнал
   const tickCompose = () => { $('#composeTime').textContent = hhmm(now()); };
-  tickCompose(); setInterval(tickCompose, 15000);
+  tickCompose();
+  setInterval(() => {
+    tickCompose();
+    // обновляем «сейчас» в плане дня раз в минуту
+    if (ui.view === 'today' && !document.querySelector('dialog[open]')) renderPlan(ui.day, $('#dayPlan'));
+  }, 60000);
   $('#noteImportant').addEventListener('click', () => {
     ui.important = !ui.important;
     $('#noteImportant').setAttribute('aria-pressed', ui.important);
@@ -597,7 +1228,7 @@ function bind() {
     const b = e.target.closest('.note');
     if (b && state.notes[b.dataset.nid]) openNote(state.notes[b.dataset.nid]);
   });
-  $('#noteDlgForm').addEventListener('submit', (e) => {
+  $('#noteDlgForm').addEventListener('submit', () => {
     const n = state.notes[ui.editNote];
     const text = $('#nText').value.trim();
     const ts = new Date($('#nTime').value).getTime();
@@ -613,7 +1244,7 @@ function bind() {
     commit();
   });
 
-  // настройки: привычки
+  // настройки: ежедневные дела
   $('#habitAdd').addEventListener('click', () => openHabit(null));
   $('#habitAdmin').addEventListener('click', (e) => {
     const row = e.target.closest('.admin-row');
@@ -670,8 +1301,10 @@ function bind() {
   // тема
   $$('#themeSeg button').forEach((b) => b.addEventListener('click', () => {
     const t = b.dataset.theme;
-    if (t === 'auto') { localStorage.removeItem(LS_THEME); delete document.documentElement.dataset.theme; }
-    else { localStorage.setItem(LS_THEME, t); document.documentElement.dataset.theme = t; }
+    try {
+      if (t === 'auto') { localStorage.removeItem(LS_THEME); delete document.documentElement.dataset.theme; }
+      else { localStorage.setItem(LS_THEME, t); document.documentElement.dataset.theme = t; }
+    } catch (e) {}
     renderSettings();
   }));
 
@@ -705,13 +1338,13 @@ function bind() {
   });
   window.addEventListener('online', () => scheduleSync(200));
   window.addEventListener('storage', (e) => { if (e.key === LS_STATE) { state = loadState(); render(); } });
-  window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (v && v !== ui.view) setView(v); });
+  window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (VIEWS.includes(v) && v !== ui.view) setView(v); });
 }
 
 /* ---------- старт ---------- */
 bind();
 const startView = location.hash.slice(1);
-setView(['today', 'journal', 'history', 'settings'].includes(startView) ? startView : 'today');
+setView(VIEWS.includes(startView) ? startView : 'today');
 render();
 if (token()) runSync();
 
