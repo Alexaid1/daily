@@ -1,0 +1,17 @@
+{
+  "name": "Daily — чекер дел",
+  "short_name": "Daily",
+  "description": "Ежедневные дела, разовые задачи и журнал с отметками времени",
+  "lang": "ru",
+  "start_url": "./#today",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f5f2",
+  "theme_color": "#4f46e5",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

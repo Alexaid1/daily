@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Daily — чекер дел</title>
+  <meta name="description" content="Ежедневные дела, разовые задачи и журнал с отметками времени">
+  <meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111214" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Daily">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    // применяем тему до отрисовки, чтобы не мигало
+    try { var t = localStorage.getItem('dt_theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body data-view="today">
+  <header class="topbar">
+    <div class="brand">Daily</div>
+    <button class="sync-pill" id="syncPill" type="button" title="Синхронизация">
+      <span class="dot"></span><span class="label">Локально</span>
+    </button>
+  </header>
+
+  <nav class="tabbar" aria-label="Разделы">
+    <button type="button" data-tab="today" class="active">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg><span>Сегодня</span>
+    </button>
+    <button type="button" data-tab="journal" class="tab-journal">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8.5 10h7M8.5 13.5h7M8.5 17h4"/></svg><span>Журнал</span>
+    </button>
+    <button type="button" data-tab="history">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>История</span>
+    </button>
+    <button type="button" data-tab="settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Настройки</span>
+    </button>
+  </nav>
+
+  <main class="main">
+    <!-- СЕГОДНЯ -->
+    <section class="view" id="view-today">
+      <div class="day-head">
+        <button class="icon-btn" id="dayPrev" type="button" aria-label="Предыдущий день">‹</button>
+        <div class="day-title">
+          <div class="day-name" id="dayName"></div>
+          <div class="day-sub" id="daySub"></div>
+          <button class="link-btn" id="dayToday" type="button" hidden>← к сегодня</button>
+        </div>
+        <button class="icon-btn" id="dayNext" type="button" aria-label="Следующий день">›</button>
+      </div>
+
+      <div class="progress card">
+        <div class="progress-top">
+          <span class="progress-label">Ежедневные дела</span>
+          <span class="progress-count" id="progressCount">0 / 0</span>
+        </div>
+        <div class="bar"><div class="bar-fill" id="progressFill"></div></div>
+      </div>
+
+      <div id="habitList"></div>
+
+      <h2 class="section-title">Разовые дела</h2>
+      <form class="add-task card" id="taskForm" autocomplete="off">
+        <input type="text" id="taskTitle" placeholder="Не забыть сделать…" enterkeyhint="done" required>
+        <div class="add-task-row">
+          <label class="date-chip">
+            <span>Срок</span>
+            <input type="date" id="taskDue">
+          </label>
+          <button class="btn primary" type="submit">Добавить</button>
+        </div>
+      </form>
+      <div id="taskList"></div>
+    </section>
+
+    <!-- ЖУРНАЛ -->
+    <section class="view" id="view-journal">
+      <h2 class="section-title first">Журнал</h2>
+      <form class="compose card" id="noteForm">
+        <textarea id="noteText" rows="3" placeholder="Мысль, итог, инсайт… Время проставится само"></textarea>
+        <div class="compose-row">
+          <button class="star-toggle" id="noteImportant" type="button" aria-pressed="false" title="Важное">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>
+            <span>Важное</span>
+          </button>
+          <span class="compose-time" id="composeTime"></span>
+          <button class="btn primary" type="submit">Записать</button>
+        </div>
+      </form>
+      <div class="journal-tools">
+        <div class="seg" role="group" aria-label="Фильтр">
+          <button type="button" data-filter="all" class="active">Все</button>
+          <button type="button" data-filter="important">★ Важные</button>
+        </div>
+        <input type="search" id="noteSearch" placeholder="Поиск">
+      </div>
+      <div id="noteList"></div>
+    </section>
+
+    <!-- ИСТОРИЯ -->
+    <section class="view" id="view-history">
+      <h2 class="section-title first">Последние 16 недель</h2>
+      <div class="card heat-card">
+        <div id="heatmap" class="heatmap"></div>
+        <div class="heat-legend"><span>меньше</span><i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><span>больше</span></div>
+      </div>
+      <h2 class="section-title">По делам · 30 дней</h2>
+      <div id="habitStats"></div>
+    </section>
+
+    <!-- НАСТРОЙКИ -->
+    <section class="view" id="view-settings">
+      <h2 class="section-title first">Синхронизация</h2>
+      <div class="card settings-card">
+        <p class="sync-status" id="syncStatus">Данные хранятся только на этом устройстве.</p>
+        <div id="syncSetup">
+          <ol class="steps">
+            <li>Создай токен с доступом только к Gist: <a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=Daily%20tracker" target="_blank" rel="noopener">открыть GitHub</a> → «Generate token».</li>
+            <li>Вставь его сюда. Токен хранится только в этом браузере.</li>
+            <li>Повтори на втором устройстве с тем же токеном — данные подтянутся.</li>
+          </ol>
+          <div class="token-row">
+            <input type="password" id="tokenInput" placeholder="ghp_…" autocomplete="off" spellcheck="false">
+            <button class="btn primary" id="tokenSave" type="button">Подключить</button>
+          </div>
+        </div>
+        <div class="btn-row" id="syncActions" hidden>
+          <button class="btn" id="syncNow" type="button">Синхронизировать</button>
+          <button class="btn danger-ghost" id="syncOff" type="button">Отключить</button>
+        </div>
+      </div>
+
+      <h2 class="section-title">Ежедневные дела</h2>
+      <div id="habitAdmin"></div>
+      <button class="btn wide" id="habitAdd" type="button">+ Добавить дело</button>
+
+      <h2 class="section-title">Тема</h2>
+      <div class="seg wide" role="group" aria-label="Тема" id="themeSeg">
+        <button type="button" data-theme="auto">Авто</button>
+        <button type="button" data-theme="light">Светлая</button>
+        <button type="button" data-theme="dark">Тёмная</button>
+      </div>
+
+      <h2 class="section-title">Данные</h2>
+      <div class="btn-row">
+        <button class="btn" id="exportBtn" type="button">Скачать копию (JSON)</button>
+        <label class="btn">Загрузить копию<input type="file" id="importInput" accept="application/json,.json" hidden></label>
+      </div>
+      <p class="muted small">Загрузка не стирает текущие данные, а объединяет их с копией.</p>
+    </section>
+  </main>
+
+  <!-- Диалог: дело -->
+  <dialog id="habitDialog">
+    <form method="dialog" class="dlg" id="habitDlgForm">
+      <h3 id="habitDlgTitle">Дело</h3>
+      <label class="field"><span>Название</span><input type="text" id="hTitle" required></label>
+      <label class="field"><span>Подсказка (необязательно)</span><input type="text" id="hHint" placeholder="например, ≥ 2 часа"></label>
+      <label class="field"><span>Направление</span><select id="hCat"></select></label>
+      <div class="field"><span>Дни (ничего не выбрано — каждый день)</span>
+        <div class="days" id="hDays"></div>
+      </div>
+      <div class="dlg-actions">
+        <button class="btn danger-ghost" id="hDelete" type="button">Удалить</button>
+        <span class="spacer"></span>
+        <button class="btn" value="cancel" type="button" data-close>Отмена</button>
+        <button class="btn primary" id="hSave" type="submit">Сохранить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Диалог: запись журнала -->
+  <dialog id="noteDialog">
+    <form method="dialog" class="dlg" id="noteDlgForm">
+      <h3>Запись</h3>
+      <label class="field"><span>Время</span><input type="datetime-local" id="nTime" required></label>
+      <label class="field"><span>Текст</span><textarea id="nText" rows="6" required></textarea></label>
+      <label class="check-field"><input type="checkbox" id="nImportant"> Важное</label>
+      <div class="dlg-actions">
+        <button class="btn danger-ghost" id="nDelete" type="button">Удалить</button>
+        <span class="spacer"></span>
+        <button class="btn" type="button" data-close>Отмена</button>
+        <button class="btn primary" type="submit">Сохранить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
