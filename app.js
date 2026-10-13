@@ -14,7 +14,7 @@ const LS_GIST = 'dt_gist_id';
 const LS_THEME = 'dt_theme';
 const GIST_DESC = 'daily-tracker-data';
 const GIST_FILE = 'daily-tracker.json';
-const COLS = ['habits', 'checks', 'tasks', 'notes', 'projects', 'stages', 'blocks'];
+const COLS = ['habits', 'checks', 'tasks', 'notes', 'projects', 'stages', 'blocks', 'pnotes'];
 
 const CATS = {
   prog:  { name: 'Программирование', color: '#6366f1' },
@@ -143,7 +143,7 @@ function defaultState() {
       h('h-trade', 'Разбор графика', 'trade', 7, [], 'запись в журнал наблюдений'),
       h('h-sql', 'SQL', 'sql', 8),
     ]),
-    checks: {}, tasks: {}, notes: {}, projects: {}, stages: {}, blocks: {},
+    checks: {}, tasks: {}, notes: {}, projects: {}, stages: {}, blocks: {}, pnotes: {},
   };
 }
 
@@ -245,6 +245,9 @@ const projectsSorted = () => alive(state.projects).sort(byOrder);
 const stagesOf = (pid) => alive(state.stages).filter((s) => s.projectId === pid).sort(byOrder);
 const projectAlive = (pid) => state.projects[pid] && !state.projects[pid].deleted;
 const nextStage = (pid) => stagesOf(pid).find((s) => !s.done);
+// заметки проекта (stageId пустой) или конкретного этапа
+const pnotesOf = (pid, sid = '') => alive(state.pnotes).filter((n) => n.projectId === pid && (n.stageId || '') === sid).sort((a, b) => b.ts - a.ts);
+const stageNoteCount = (sid) => alive(state.pnotes).filter((n) => n.stageId === sid).length;
 
 function toggleStage(sid) {
   const s = state.stages[sid];
@@ -292,8 +295,8 @@ function allDeadlines() {
 const VIEWS = ['today', 'projects', 'calendar', 'journal', 'history', 'settings'];
 const ui = {
   view: 'today', day: dateKey(), noteFilter: 'all', noteQuery: '', important: false,
-  project: null, calMonth: dateKey().slice(0, 7), calDay: dateKey(),
-  editHabit: null, editNote: null, editBlock: null, blockDate: null, editProject: null, editStage: null,
+  project: null, stage: null, calMonth: dateKey().slice(0, 7), calDay: dateKey(),
+  editHabit: null, editNote: null, editNoteKind: 'notes', editBlock: null, blockDate: null, editProject: null, editStage: null,
 };
 const isWide = () => window.matchMedia('(min-width: 960px)').matches;
 
@@ -439,14 +442,41 @@ function renderToday() {
   renderTasks();
 }
 
+const NOTE_SVG = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8.5 11h7M8.5 15h5"/></svg>';
+
 function stageRow(s, p, withProject) {
+  const nc = stageNoteCount(s.id);
+  const parts = [];
+  if (withProject) parts.push(`<span class="chip-dot" style="background:${p.color}"></span>${esc(p.title)}`);
+  if (s.due) parts.push(dueLabel(s));
+  if (nc) parts.push(`<span class="note-count">${NOTE_SVG} ${nc}</span>`);
   return `<div class="task stage ${s.done ? 'done' : ''}" data-sid="${esc(s.id)}" style="--c:${p.color}">
     <button type="button" class="check" data-act="stoggle" aria-label="${s.done ? 'Вернуть' : 'Выполнено'}">${CHECK_SVG}</button>
-    <button type="button" class="task-body as-btn" data-act="${withProject ? 'sopen' : 'sedit'}">
+    <button type="button" class="task-body as-btn" data-act="sopen">
       <span class="task-title">${esc(s.title)}</span>
-      <span class="task-sub">${withProject ? `<span class="chip-dot" style="background:${p.color}"></span>${esc(p.title)}` : ''}${withProject && s.due ? ' · ' : ''}${dueLabel(s)}</span>
+      ${parts.length ? `<span class="task-sub">${parts.join(' · ')}</span>` : ''}
     </button>
+    ${withProject ? '' : '<span class="chev" aria-hidden="true">›</span>'}
   </div>`;
+}
+
+/* Заметки проекта/этапа: форма + лента */
+function pnotesBlock(pid, sid, placeholder) {
+  const list = pnotesOf(pid, sid);
+  const today = dateKey();
+  const when = (ts) => {
+    const k = dateKey(new Date(ts));
+    return `${k === today ? 'сегодня' : relDay(k) || shortDate(k)}, ${hhmm(ts)}`;
+  };
+  return `<div class="section-head"><h2 class="section-title">Заметки</h2>${list.length ? `<span class="section-meta">${list.length}</span>` : ''}</div>
+    <form class="compose card pnote-form" data-pid="${esc(pid)}" data-sid="${esc(sid)}">
+      <textarea rows="2" placeholder="${esc(placeholder)}"></textarea>
+      <div class="compose-row"><span class="compose-hint">Ctrl/⌘ + Enter</span><button class="btn primary" type="submit">Добавить</button></div>
+    </form>
+    ${list.length ? `<div class="list card pnote-list">${list.map((n) => `<button type="button" class="note pnote" data-pnid="${esc(n.id)}">
+        <span class="pnote-when">${when(n.ts)}</span>
+        <span class="note-text">${highlight(n.text, '')}</span>
+      </button>`).join('')}</div>` : ''}`;
 }
 
 function renderNextSteps() {
@@ -513,8 +543,17 @@ function projectCard(p) {
 
 function renderProjects() {
   const el = $('#projectsView');
-  if (ui.project && projectAlive(ui.project)) return renderProjectDetail(el, state.projects[ui.project]);
-  ui.project = null;
+  const draft = $('#projectsView .pnote-form textarea')?.value || '';
+  if (ui.project && projectAlive(ui.project)) {
+    const p = state.projects[ui.project];
+    const s = ui.stage && state.stages[ui.stage];
+    if (s && !s.deleted && s.projectId === p.id) renderStageDetail(el, s, p);
+    else { ui.stage = null; renderProjectDetail(el, p); }
+    const ta = $('#projectsView .pnote-form textarea');
+    if (ta && draft && document.activeElement !== ta) ta.value = draft; // не теряем недописанное при синхронизации
+    return;
+  }
+  ui.project = null; ui.stage = null;
   const ps = projectsSorted();
   const active = ps.filter((p) => p.status === 'active');
   const paused = ps.filter((p) => p.status === 'paused');
@@ -551,7 +590,31 @@ function renderProjectDetail(el, p) {
         <label class="date-chip"><span>Срок</span><input type="date" id="stageDue"></label>
         <button class="btn primary" type="submit">Добавить</button>
       </div>
-    </form>`;
+    </form>
+    ${pnotesBlock(p.id, '', 'Мысли, ссылки, договорённости по проекту…')}`;
+}
+
+function renderStageDetail(el, s, p) {
+  const list = stagesOf(p.id);
+  const idx = list.findIndex((x) => x.id === s.id);
+  el.innerHTML = `
+    <div class="pd-nav">
+      <button type="button" class="link-btn" id="stageBack">‹ ${esc(p.title)}</button>
+      <button type="button" class="btn small-btn" id="stageEdit">Изменить</button>
+    </div>
+    <div class="card pd-head stage-head ${s.done ? 'done' : ''}" style="--c:${p.color}">
+      <div class="sd-eyebrow"><span class="chip-dot" style="background:${p.color}"></span>${esc(p.title)} · этап ${idx + 1} из ${list.length}</div>
+      <div class="sd-row">
+        <button type="button" class="check big" id="stageDoneToggle" aria-label="${s.done ? 'Вернуть' : 'Выполнено'}">${CHECK_SVG}</button>
+        <h1 class="pd-title">${esc(s.title)}</h1>
+      </div>
+      <div class="pd-meta"><span>${s.done ? 'Выполнен' + (s.doneAt > 1 ? ' ' + shortDate(dateKey(new Date(s.doneAt))) : '') : s.due ? 'Срок: ' + dueLabel(s) : 'Без срока'}</span></div>
+    </div>
+    ${pnotesBlock(p.id, s.id, 'Что сделать, что выяснил, ссылки, вопросы…')}
+    <div class="sd-pager">
+      ${idx > 0 ? `<button type="button" class="link-btn" data-goto-stage="${esc(list[idx - 1].id)}">‹ ${esc(list[idx - 1].title)}</button>` : '<span></span>'}
+      ${idx < list.length - 1 ? `<button type="button" class="link-btn" data-goto-stage="${esc(list[idx + 1].id)}">${esc(list[idx + 1].title)} ›</button>` : '<span></span>'}
+    </div>`;
 }
 
 /* ---------- отрисовка: Календарь ---------- */
@@ -950,20 +1013,24 @@ function moveStage(dir) {
   $('#sDown').disabled = j >= list.length - 1;
 }
 
-function openNote(n) {
+function openNote(n, kind = 'notes') {
   ui.editNote = n.id;
+  ui.editNoteKind = kind;
   const d = new Date(n.ts);
   $('#nTime').value = `${dateKey(d)}T${hhmm(n.ts)}`;
   $('#nText').value = n.text;
   $('#nImportant').checked = !!n.important;
+  $('#nImportantRow').hidden = kind !== 'notes';
   $('#noteDialog').showModal();
 }
 
-function goProject(pid) {
+function goProject(pid, sid = null) {
   ui.project = pid;
+  ui.stage = sid;
   renderProjects();
   setView('projects');
 }
+const goStage = (sid) => { const s = state.stages[sid]; if (s) goProject(s.projectId, sid); };
 
 /* ---------- тост ---------- */
 let toastTimer;
@@ -978,7 +1045,7 @@ function toast(msg) {
 /* ---------- события ---------- */
 function bind() {
   $$('.tabbar button').forEach((b) => b.addEventListener('click', () => {
-    if (b.dataset.tab === 'projects') { ui.project = null; renderProjects(); }
+    if (b.dataset.tab === 'projects') { ui.project = null; ui.stage = null; renderProjects(); }
     setView(b.dataset.tab);
   }));
   $('#gearBtn').addEventListener('click', () => setView(ui.view === 'settings' ? 'today' : 'settings'));
@@ -1007,7 +1074,7 @@ function bind() {
     const s = state.stages[row.dataset.sid];
     if (!s) return;
     if (act.dataset.act === 'stoggle') toggleStage(s.id);
-    else goProject(s.projectId);
+    else goStage(s.id);
   });
 
   // разовые дела
@@ -1043,15 +1110,39 @@ function bind() {
     if (e.target.closest('#projectBack')) { ui.project = null; renderProjects(); window.scrollTo({ top: 0 }); return; }
     if (e.target.closest('#projectEdit')) return openProject(state.projects[ui.project]);
     const card = e.target.closest('.project-card');
-    if (card) { ui.project = card.dataset.pid; renderProjects(); window.scrollTo({ top: 0 }); return; }
+    if (card) { ui.project = card.dataset.pid; ui.stage = null; renderProjects(); window.scrollTo({ top: 0 }); return; }
+    // страница этапа
+    if (e.target.closest('#stageBack')) { ui.stage = null; renderProjects(); window.scrollTo({ top: 0 }); return; }
+    if (e.target.closest('#stageEdit')) return openStage(state.stages[ui.stage]);
+    if (e.target.closest('#stageDoneToggle')) return toggleStage(ui.stage);
+    const go = e.target.closest('[data-goto-stage]');
+    if (go) { ui.stage = go.dataset.gotoStage; renderProjects(); window.scrollTo({ top: 0 }); return; }
+    // заметки
+    const pn = e.target.closest('.pnote');
+    if (pn && !e.target.closest('a') && state.pnotes[pn.dataset.pnid]) return openNote(state.pnotes[pn.dataset.pnid], 'pnotes');
+    // строки этапов в проекте
     const act = e.target.closest('[data-act]');
     const row = e.target.closest('.stage');
     if (act && row && state.stages[row.dataset.sid]) {
       if (act.dataset.act === 'stoggle') toggleStage(row.dataset.sid);
-      else openStage(state.stages[row.dataset.sid]);
+      else { ui.stage = row.dataset.sid; renderProjects(); window.scrollTo({ top: 0 }); }
     }
   });
+  const addPnote = (form) => {
+    const ta = $('textarea', form);
+    const text = ta.value.trim();
+    if (!text) { ta.focus(); return; }
+    const id = uid(), t = now();
+    state.pnotes[id] = { id, projectId: form.dataset.pid, stageId: form.dataset.sid || '', text, ts: t, updatedAt: t };
+    ta.value = '';
+    commit();
+  };
+  $('#projectsView').addEventListener('keydown', (e) => {
+    const form = e.target.closest('.pnote-form');
+    if (form && e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); addPnote(form); }
+  });
   $('#projectsView').addEventListener('submit', (e) => {
+    if (e.target.classList.contains('pnote-form')) { e.preventDefault(); return addPnote(e.target); }
     if (e.target.id !== 'stageForm') return;
     e.preventDefault();
     const title = $('#stageTitle').value.trim();
@@ -1083,7 +1174,7 @@ function bind() {
       deadline: $('#pDeadline').value || '',
       updatedAt: now(),
     };
-    if (!ui.editProject) ui.project = base.id;
+    if (!ui.editProject) { ui.project = base.id; ui.stage = null; }
     commit();
   });
   $('#pDelete').addEventListener('click', () => {
@@ -1185,7 +1276,8 @@ function bind() {
       if (kind === 'stage') return toggleStage(id);
       const t = state.tasks[id];
       if (t) { state.tasks[id] = { ...t, done: !t.done, doneAt: t.done ? 0 : now(), updatedAt: now() }; commit(); }
-    } else if (pid) goProject(pid);
+    } else if (kind === 'stage') goStage(id);
+    else if (pid) goProject(pid);
     else if (kind === 'task') { const t = state.tasks[id]; if (t && t.due) { ui.calDay = t.due; ui.calMonth = t.due.slice(0, 7); renderCalendar(); } }
   };
   $('#calDeadlines').addEventListener('click', onDeadlineClick);
@@ -1229,17 +1321,21 @@ function bind() {
     if (b && state.notes[b.dataset.nid]) openNote(state.notes[b.dataset.nid]);
   });
   $('#noteDlgForm').addEventListener('submit', () => {
-    const n = state.notes[ui.editNote];
+    const col = state[ui.editNoteKind];
+    const n = col[ui.editNote];
     const text = $('#nText').value.trim();
-    const ts = new Date($('#nTime').value).getTime();
+    let ts = new Date($('#nTime').value).getTime();
     if (!n || !text || Number.isNaN(ts)) return;
-    state.notes[n.id] = { ...n, text, ts, important: $('#nImportant').checked, updatedAt: now() };
+    if ($('#nTime').value === `${dateKey(new Date(n.ts))}T${hhmm(n.ts)}`) ts = n.ts; // время не трогали — не сдвигаем секунды
+    col[n.id] = { ...n, text, ts, updatedAt: now() };
+    if (ui.editNoteKind === 'notes') col[n.id].important = $('#nImportant').checked;
     commit();
   });
   $('#nDelete').addEventListener('click', () => {
-    const n = state.notes[ui.editNote];
+    const col = state[ui.editNoteKind];
+    const n = col[ui.editNote];
     if (!n || !confirm('Удалить запись?')) return;
-    state.notes[n.id] = { ...n, deleted: true, updatedAt: now() };
+    col[n.id] = { ...n, deleted: true, updatedAt: now() };
     $('#noteDialog').close();
     commit();
   });
