@@ -155,7 +155,7 @@
       </div>
 
       <div class="field">
-        <span>Время (необязательно)</span>
+        <span id="iTimeLabel">Время (необязательно)</span>
         <div class="time-row">
           <input type="time" id="iStart" aria-label="С">
           <span class="time-dash">—</span>
@@ -200,6 +200,52 @@
         <button class="btn primary" type="submit">Сохранить</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Задача в конкретный день: минимум, шаги, время -->
+  <dialog id="occDialog">
+    <div class="dlg">
+      <div class="dlg-top">
+        <div class="o-head">
+          <h3 id="oTitle"></h3>
+          <div class="o-sub" id="oSub"></div>
+        </div>
+        <button type="button" class="x-btn" data-close aria-label="Закрыть">×</button>
+      </div>
+
+      <div class="o-min" id="oMin"></div>
+
+      <div class="field">
+        <span>Что сделать в этот день</span>
+        <div id="oSteps"></div>
+        <form class="quick-add card o-add" id="oStepForm" autocomplete="off">
+          <span class="plus">+</span>
+          <input type="text" id="oStepInput" placeholder="Добавить свой шаг…" enterkeyhint="done">
+        </form>
+      </div>
+
+      <div class="field">
+        <span>Время в этот день</span>
+        <div class="time-row">
+          <input type="time" id="oStart" aria-label="С">
+          <span class="time-dash">—</span>
+          <input type="time" id="oEnd" aria-label="До">
+        </div>
+        <div class="o-time-hint">
+          <span id="oTimeHint"></span>
+          <button type="button" class="link-btn" id="oTimeReset">как обычно</button>
+          <button type="button" class="link-btn" id="oTimeClear">без времени</button>
+        </div>
+        <p class="form-error" id="oError" hidden></p>
+      </div>
+
+      <div class="dlg-actions wrap">
+        <button class="btn danger-ghost" id="oSkip" type="button">Убрать в этот день</button>
+        <button class="btn" id="oSettings" type="button">Настройки задачи</button>
+        <span class="spacer"></span>
+        <button class="btn primary" id="oDone" type="button">Готово</button>
+      </div>
+    </div>
   </dialog>
 
   <!-- Проект -->

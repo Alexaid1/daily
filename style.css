@@ -322,3 +322,30 @@ dialog::backdrop { background: rgba(10, 10, 12, .45); }
   .sync-pill .label { display: none; }
   .sync-pill { padding: 0 12px; }
 }
+
+/* ---------- карточка дня задачи ---------- */
+.o-head { min-width: 0; }
+.o-head h3 { font-size: 21px; letter-spacing: -.01em; }
+.o-sub { color: var(--muted); font-size: 13.5px; margin-top: 2px; }
+.o-min {
+  display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border-radius: 12px;
+  background: color-mix(in srgb, var(--c) 11%, var(--surface)); border: 1px solid color-mix(in srgb, var(--c) 30%, var(--border));
+}
+.o-min strong { font-size: 17px; }
+.o-min.empty-min { background: var(--surface-2); border-color: var(--border); font-size: 14px; }
+.o-min-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.o-why { font-size: 13.5px; color: var(--muted); }
+.step { display: flex; align-items: center; gap: 12px; padding: 10px 6px 10px 12px; min-height: 50px; }
+.step .check { border-color: color-mix(in srgb, var(--c) 55%, var(--border)); }
+.step.done .check { background: var(--c); border-color: var(--c); }
+.step.done .check svg { opacity: 1; }
+.step-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.step.done .step-text { color: var(--muted); text-decoration: line-through; }
+.step-tag { flex: none; font-size: 11px; font-weight: 700; color: var(--muted); background: var(--surface-2); border-radius: 6px; padding: 2px 6px; margin-right: 6px; }
+.x-btn.small { width: 30px; height: 30px; font-size: 18px; }
+.o-add { margin-top: 8px; }
+.o-time-hint { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.o-time-hint .link-btn { font-size: 13px; }
+.min-label { color: var(--text); }
+.steps-count { font-weight: 650; }
+.steps-count.all { color: var(--ok); }

@@ -1,5 +1,5 @@
 // Простой офлайн-кэш: сначала сеть (чтобы обновления приходили сразу), при её отсутствии — кэш.
-const CACHE = 'daily-v4';
+const CACHE = 'daily-v5';
 const ASSETS = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {

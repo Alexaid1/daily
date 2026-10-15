@@ -16,7 +16,9 @@ const LS_THEME = 'dt_theme';
 const GIST_DESC = 'daily-tracker-data';
 const GIST_FILE = 'daily-tracker.json';
 // habits/tasks/stages/blocks — старый формат, читается только для переноса
-const COLS = ['items', 'checks', 'notes', 'projects', 'pnotes', 'habits', 'tasks', 'stages', 'blocks'];
+// occ — настройки конкретного дня у задачи: своё время, свои шаги, отметки шагов
+const COLS = ['items', 'checks', 'notes', 'projects', 'pnotes', 'occ', 'habits', 'tasks', 'stages', 'blocks'];
+const LS_PLAN = 'dt_plan_cache';
 const MIGRATION_START = '2026-10-13'; // с этого дня считаются перенесённые ежедневные дела
 
 const CATS = {
@@ -269,8 +271,52 @@ function itemInfo(it) {
 }
 const itemTitle = (it) => it.title || itemInfo(it).name || 'Без названия';
 
-const byTimeThenOrder = (a, b) => {
-  const ta = a.start ? toMin(a.start) : 1e4, tb = b.start ? toMin(b.start) : 1e4;
+/* ---------- день задачи: своё время и шаги ---------- */
+const occKey = (it, k) => `${k}|${it.id}`;
+const occOf = (it, k) => (k && state.occ[occKey(it, k)]) || null;
+// время задачи в конкретный день: своё (если задано) или обычное
+function timeOf(it, k) {
+  const o = occOf(it, k);
+  if (o && o.timeSet) return { start: o.start || '', end: o.end || '', custom: true };
+  return { start: it.start || '', end: it.end || '', custom: false };
+}
+function setOcc(it, k, patch) {
+  const id = occKey(it, k);
+  state.occ[id] = { ...(state.occ[id] || { id, steps: [], stepDone: {} }), ...patch, updatedAt: now() };
+}
+
+/* План от Claude: plan.json в репозитории сайта */
+let plan = { defaults: {}, days: {} };
+try { const c = JSON.parse(localStorage.getItem(LS_PLAN) || 'null'); if (c && c.days) plan = c; } catch (e) {}
+const hashText = (t) => { let h = 0; for (const ch of t) h = (h * 31 + ch.codePointAt(0)) | 0; return 'p' + (h >>> 0).toString(36); };
+function planFor(it, k) {
+  if (!k) return null;
+  const d = plan.days && plan.days[k] && plan.days[k][it.id];
+  return d || (isRepeat(it) && plan.defaults && plan.defaults[it.id]) || null;
+}
+function stepsOf(it, k) {
+  const p = planFor(it, k);
+  const o = occOf(it, k);
+  const done = (o && o.stepDone) || {};
+  const fromPlan = ((p && p.steps) || []).map((text) => ({ id: hashText(text), text, plan: true }));
+  const own = ((o && o.steps) || []).filter((x) => !x.deleted);
+  return [...fromPlan, ...own].map((x) => ({ ...x, done: !!done[x.id] }));
+}
+async function fetchPlan() {
+  try {
+    const r = await fetch('plan.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const p = await r.json();
+    if (!p || typeof p !== 'object') return;
+    plan = { defaults: p.defaults || {}, days: p.days || {}, updated: p.updated || '' };
+    try { localStorage.setItem(LS_PLAN, JSON.stringify(plan)); } catch (e) {}
+    render();
+  } catch (e) { /* офлайн — остаётся кэш */ }
+}
+
+const byTimeOn = (k) => (a, b) => {
+  const sa = timeOf(a, k).start, sb = timeOf(b, k).start;
+  const ta = sa ? toMin(sa) : 1e4, tb = sb ? toMin(sb) : 1e4;
   if (ta !== tb) return ta - tb;
   if (isRepeat(a) !== isRepeat(b)) return isRepeat(a) ? 1 : -1; // разовые выше привычек
   return (a.order || 0) - (b.order || 0) || (a.createdAt || 0) - (b.createdAt || 0);
@@ -278,7 +324,7 @@ const byTimeThenOrder = (a, b) => {
 
 let _items = null; // кэш живых задач на один проход отрисовки
 const liveItems = () => _items || (_items = alive(state.items));
-const dayItems = (k) => liveItems().filter((it) => occursOn(it, k)).sort(byTimeThenOrder);
+const dayItems = (k) => liveItems().filter((it) => occursOn(it, k)).sort(byTimeOn(k));
 function dayStats(k) {
   const list = dayItems(k);
   return { total: list.length, done: list.filter((it) => doneOn(it, k)).length, oneOff: list.filter((it) => !isRepeat(it)) };
@@ -310,7 +356,7 @@ const projectsSorted = () => alive(state.projects).sort((a, b) => (a.order || 0)
 const VIEWS = ['cal', 'projects', 'settings'];
 const ui = {
   view: 'cal', day: dateKey(), month: dateKey().slice(0, 7), project: null, important: false,
-  edit: null, editDate: null, editNote: null, editNoteKind: 'notes', editProject: null,
+  occ: null, edit: null, editDate: null, editNote: null, editNoteKind: 'notes', editProject: null,
 };
 const isWide = () => window.matchMedia('(min-width: 960px)').matches;
 
@@ -377,13 +423,18 @@ function itemRow(it, k, opts = {}) {
   const info = itemInfo(it);
   const done = k ? doneOn(it, k) : !!it.done;
   const isToday = k === dateKey();
-  const s = it.start ? toMin(it.start) : null, e = it.end ? toMin(it.end) : null;
+  const tm = timeOf(it, k);
+  const s = tm.start ? toMin(tm.start) : null, e = tm.end ? toMin(tm.end) : null;
   const nm = nowMin();
   const nowCls = isToday && s !== null && e !== null && nm >= s && nm < e && !done ? 'now' : '';
   const sub = [];
   if (info.name && it.title && it.title !== info.name && opts.showProject !== false) sub.push(`<span class="chip-dot" style="background:${info.color}"></span>${esc(info.name)}`);
   if (opts.showDate && it.date) sub.push(`<span class="${!done && it.date < dateKey() ? 'overdue' : ''}">${relDay(it.date) || shortDate(it.date)}</span>`);
-  if (it.hint) sub.push(esc(it.hint));
+  const pl = planFor(it, k);
+  const steps = k ? stepsOf(it, k) : [];
+  if (pl && pl.min) sub.push(`<span class="min-label">минимум: ${esc(pl.min)}</span>`);
+  else if (it.hint) sub.push(esc(it.hint));
+  if (steps.length) sub.push(`<span class="steps-count ${steps.every((x) => x.done) ? 'all' : ''}">✓ ${steps.filter((x) => x.done).length}/${steps.length}</span>`);
   if (isRepeat(it)) {
     const st = currentStreak(it);
     sub.push(REPEAT_SVG + (st >= 2 ? ` <span class="streak">🔥 ${st}</span>` : ''));
@@ -391,7 +442,7 @@ function itemRow(it, k, opts = {}) {
   const nc = itemNotes(it.id).length;
   if (nc) sub.push(`${NOTE_SVG} ${nc}`);
   if (nowCls) sub.push(`<b class="now-label">сейчас, ещё ${fmtDur(e - nm)}</b>`);
-  const time = it.start ? `<span class="it-time">${it.start}${it.end ? '–' + it.end : ''}${e !== null && s !== null ? `<span class="it-dur">${fmtDur(e - s)}</span>` : ''}</span>` : '';
+  const time = tm.start ? `<span class="it-time">${tm.start}${tm.end ? '–' + tm.end : ''}${e !== null && s !== null ? `<span class="it-dur">${fmtDur(e - s)}</span>` : ''}${tm.custom && isRepeat(it) ? '<span class="it-dur">· в этот день</span>' : ''}</span>` : '';
   return `<div class="it ${done ? 'done' : ''} ${nowCls} ${info.color ? 'colored' : ''}" data-iid="${esc(it.id)}" data-date="${k || ''}" style="--c:${info.color || 'var(--border)'}">
     <button type="button" class="check" data-act="toggle" aria-label="${done ? 'Вернуть' : 'Выполнено'}">${CHECK_SVG}</button>
     <button type="button" class="it-body" data-act="open">
@@ -410,6 +461,7 @@ function bindItemList(el, dateOf) {
     if (!it) return;
     const k = row.dataset.date || dateOf(it);
     if (act.dataset.act === 'toggle') toggleItem(it, k);
+    else if (k && (isRepeat(it) || planFor(it, k))) openOcc(it, k);
     else openItem(it, k);
   });
 }
@@ -443,11 +495,12 @@ function renderDay() {
   if (list.length) {
     let rows = '', prevEnd = null;
     for (const it of list) {
-      if (it.start && prevEnd !== null) {
-        const gap = toMin(it.start) - prevEnd;
+      const tm = timeOf(it, k);
+      if (tm.start && prevEnd !== null) {
+        const gap = toMin(tm.start) - prevEnd;
         if (gap >= 30) rows += `<div class="gap">свободно ${fmtDur(gap)}</div>`;
       }
-      if (it.start) prevEnd = Math.max(prevEnd || 0, toMin(it.end || it.start));
+      if (tm.start) prevEnd = Math.max(prevEnd || 0, toMin(tm.end || tm.start));
       else prevEnd = null;
       rows += itemRow(it, k);
     }
@@ -734,6 +787,7 @@ function setDays(days) { $$('#iDays button').forEach((b) => b.classList.toggle('
 function updateItemForm() {
   const rep = selectedDays().length > 0;
   $('#iDateLabel').textContent = rep ? 'Повторять начиная с' : 'Дата';
+  $('#iTimeLabel').textContent = rep ? 'Обычное время (в конкретный день можно поменять)' : 'Время (необязательно)';
   $('#iNoDate').hidden = rep;
   $('#iDur').hidden = !$('#iStart').value;
   $('#iNoTime').hidden = !$('#iStart').value && !$('#iEnd').value;
@@ -790,6 +844,56 @@ function saveItem(e) {
   }
   commit();
 }
+
+/* ---------- карточка дня задачи ---------- */
+function openOcc(it, k) {
+  ui.occ = { id: it.id, k };
+  renderOcc();
+  $('#oStepInput').value = '';
+  $('#oError').hidden = true;
+  if (!$('#occDialog').open) $('#occDialog').showModal();
+}
+function renderOcc() {
+  if (!ui.occ) return;
+  const it = state.items[ui.occ.id];
+  if (!it) return;
+  const k = ui.occ.k;
+  const info = itemInfo(it);
+  const done = doneOn(it, k);
+  $('#occDialog').style.setProperty('--c', info.color || 'var(--accent)');
+  $('#oTitle').textContent = itemTitle(it);
+  const rel = relDay(k);
+  const parts = [(rel ? cap(rel) + ', ' : '') + longDate(k)];
+  if (info.name && it.title !== info.name) parts.push(info.name);
+  if (isRepeat(it)) { const st = currentStreak(it); if (st >= 2) parts.push(`🔥 серия ${st}`); }
+  $('#oSub').textContent = parts.join(' · ');
+
+  const pl = planFor(it, k);
+  $('#oMin').innerHTML = pl && pl.min
+    ? `<span class="o-min-label">Минимум на день</span><strong>${esc(pl.min)}</strong>${pl.why ? `<span class="o-why">${esc(pl.why)}</span>` : ''}`
+    : `<span class="o-min-label">Минимум на день</span><span class="muted">Плана пока нет — попроси Claude составить, или добавь свои шаги ниже.</span>`;
+  $('#oMin').classList.toggle('empty-min', !(pl && pl.min));
+
+  const steps = stepsOf(it, k);
+  $('#oSteps').innerHTML = steps.length ? `<div class="list card">${steps.map((x) => `<div class="step ${x.done ? 'done' : ''}" data-step="${esc(x.id)}">
+      <button type="button" class="check" data-act="step" aria-label="${x.done ? 'Вернуть' : 'Сделано'}">${CHECK_SVG}</button>
+      <span class="step-text">${highlightLinks(x.text)}</span>
+      ${x.plan ? '' : `<button type="button" class="x-btn small" data-act="sdel" aria-label="Удалить шаг">×</button>`}
+    </div>`).join('')}</div>` : '';
+
+  const tm = timeOf(it, k);
+  $('#oStart').value = tm.start;
+  $('#oEnd').value = tm.end;
+  const usual = it.start ? `${it.start}${it.end ? '–' + it.end : ''}` : 'без времени';
+  $('#oTimeHint').textContent = tm.custom ? `Обычно: ${usual}` : (isRepeat(it) ? `Как обычно (${usual}). Поменяй — и время изменится только в этот день.` : '');
+  $('#oTimeReset').hidden = !tm.custom;
+  $('#oTimeClear').hidden = !tm.start;
+
+  $('#oSkip').hidden = !isRepeat(it);
+  $('#oDone').textContent = done ? 'Вернуть в работу' : 'Готово ✓';
+  $('#oDone').classList.toggle('primary', !done);
+}
+function occItem() { return ui.occ && state.items[ui.occ.id]; }
 
 /* ---------- проектный диалог ---------- */
 function openProject(p) {
@@ -948,8 +1052,100 @@ function bind() {
     if (n && state.pnotes[n.dataset.pnid]) openNote(state.pnotes[n.dataset.pnid], 'pnotes');
   });
 
+  // карточка дня задачи
+  $('#oSteps').addEventListener('click', (e) => {
+    const act = e.target.closest('[data-act]');
+    const row = e.target.closest('.step');
+    const it = occItem();
+    if (!act || !row || !it) return;
+    const { k } = ui.occ;
+    const sid = row.dataset.step;
+    const o = occOf(it, k) || { steps: [], stepDone: {} };
+    if (act.dataset.act === 'step') {
+      const stepDone = { ...(o.stepDone || {}), [sid]: !(o.stepDone || {})[sid] };
+      setOcc(it, k, { stepDone });
+      const steps = stepsOf(it, k);
+      if (stepDone[sid] && steps.length && steps.every((x) => x.done) && !doneOn(it, k)) {
+        // все шаги сделаны — отмечаем дело выполненным
+        if (isRepeat(it)) state.checks[k + '|' + it.id] = { done: true, updatedAt: now() };
+        else state.items[it.id] = { ...it, done: true, doneAt: now(), updatedAt: now() };
+        toast('Минимум выполнен 🎉');
+      }
+    } else if (act.dataset.act === 'sdel') {
+      setOcc(it, k, { steps: (o.steps || []).filter((x) => x.id !== sid) });
+    }
+    commit();
+    renderOcc();
+  });
+  $('#oStepForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const it = occItem();
+    const text = $('#oStepInput').value.trim();
+    if (!it || !text) return;
+    const o = occOf(it, ui.occ.k) || { steps: [] };
+    setOcc(it, ui.occ.k, { steps: [...(o.steps || []), { id: uid(), text }] });
+    $('#oStepInput').value = '';
+    commit();
+    renderOcc();
+  });
+  const saveOccTime = () => {
+    const it = occItem();
+    if (!it) return;
+    let start = $('#oStart').value, end = $('#oEnd').value;
+    if (start && (!end || toMin(end) <= toMin(start))) {
+      // сохраняем длительность обычного блока, иначе — час
+      const dur = it.start && it.end ? toMin(it.end) - toMin(it.start) : 60;
+      end = fromMin(Math.min(toMin(start) + dur, 23 * 60 + 59));
+      $('#oEnd').value = end;
+    }
+    if (end && !start) { $('#oError').textContent = 'Укажи время начала'; $('#oError').hidden = false; return; }
+    $('#oError').hidden = true;
+    const same = start === (it.start || '') && end === (it.end || '');
+    setOcc(it, ui.occ.k, same ? { timeSet: false, start: '', end: '' } : { timeSet: true, start, end });
+    commit();
+    renderOcc();
+  };
+  $('#oStart').addEventListener('change', saveOccTime);
+  $('#oEnd').addEventListener('change', saveOccTime);
+  $('#oTimeReset').addEventListener('click', () => {
+    const it = occItem();
+    if (!it) return;
+    setOcc(it, ui.occ.k, { timeSet: false, start: '', end: '' });
+    commit();
+    renderOcc();
+  });
+  $('#oTimeClear').addEventListener('click', () => {
+    const it = occItem();
+    if (!it) return;
+    setOcc(it, ui.occ.k, { timeSet: !!it.start, start: '', end: '' });
+    commit();
+    renderOcc();
+  });
+  $('#oDone').addEventListener('click', () => {
+    const it = occItem();
+    if (!it) return;
+    const wasDone = doneOn(it, ui.occ.k);
+    toggleItem(it, ui.occ.k);
+    if (!wasDone) $('#occDialog').close(); else renderOcc();
+  });
+  $('#oSkip').addEventListener('click', () => {
+    const it = occItem();
+    if (!it) return;
+    state.items[it.id] = { ...it, skip: [...new Set([...(it.skip || []), ui.occ.k])], updatedAt: now() };
+    $('#occDialog').close();
+    commit();
+    toast('Убрано только из этого дня');
+  });
+  $('#oSettings').addEventListener('click', () => {
+    const it = occItem();
+    if (!it) return;
+    const k = ui.occ.k;
+    $('#occDialog').close();
+    openItem(it, k);
+  });
+
   // заметки дня
-  const tick = () => { $('#composeTime').textContent = hhmm(now()); };
+  const tick =() => { $('#composeTime').textContent = hhmm(now()); };
   tick();
   setInterval(() => {
     tick();
@@ -1108,6 +1304,7 @@ function bind() {
     if (dateKey() !== lastToday) { if (ui.day === lastToday) { ui.day = dateKey(); ui.month = ui.day.slice(0, 7); } lastToday = dateKey(); }
     render();
     scheduleSync(200);
+    fetchPlan();
   });
   window.addEventListener('online', () => scheduleSync(200));
   window.addEventListener('storage', (e) => { if (e.key === LS_STATE) { state = loadState(); render(); } });
@@ -1120,6 +1317,7 @@ const startView = location.hash.slice(1);
 setView(VIEWS.includes(startView) ? startView : 'cal');
 render();
 if (token()) runSync();
+fetchPlan();
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
